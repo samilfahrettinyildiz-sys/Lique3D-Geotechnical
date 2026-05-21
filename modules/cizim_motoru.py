@@ -38,23 +38,26 @@ def ciz_3d(df, hedef_derinlik):
             y=[en_ust_nokta['Y_Koordinat_m']], 
             z=[0.0], 
             mode='text', 
-            text=[f"<b>{sondaj}</b>"], # Kalın font ama kibar durması için HTML tag kullandık
+            text=[f"<b>{sondaj}</b>"], 
             textposition='top center',
             textfont=dict(
-                family='Helvetica Neue, Helvetica, Arial, sans-serif', # Premium kurumsal yazı tipi
+                family='Helvetica Neue, Helvetica, Arial, sans-serif', 
                 size=12, 
-                color='#E0E0E0' # Mat gümüş/beyaz tonu, gözü yormaz ve elit durur
+                color='#E0E0E0' 
             ),
             showlegend=False,
             hoverinfo='none'
         ))
 
-    # Belirli derinlikteki sivilasma risk (izohips) dilimi
+    # KRAL DOKUNUŞ: 3B Dilim haritasını 'linear' interpolasyon ile pürüzsüz (smooth) yapıyoruz
     dilim_df = df[(df['Derinlik_m'] >= hedef_derinlik - 2.5) & (df['Derinlik_m'] <= hedef_derinlik + 2.5)].dropna(subset=['X_Koordinat_m', 'Y_Koordinat_m', 'FS'])
     if len(dilim_df['Sondaj_No'].unique()) >= 3: 
         isi_veri = dilim_df.sort_values(by="Derinlik_m", key=lambda x: abs(x - hedef_derinlik)).groupby('Sondaj_No').first().reset_index()
         X_grid, Y_grid = np.meshgrid(np.linspace(-pad, max_x+pad, 50), np.linspace(-pad, max_y+pad, 50))
-        grid_z = griddata(isi_veri[['X_Koordinat_m', 'Y_Koordinat_m']].values, isi_veri['FS'].values, (X_grid, Y_grid), method='nearest')
+        
+        # METHOD DEĞİŞTİ: 'nearest' yerine 'linear' çekilerek köşeli geçişler engellendi
+        grid_z = griddata(isi_veri[['X_Koordinat_m', 'Y_Koordinat_m']].values, isi_veri['FS'].values, (X_grid, Y_grid), method='linear')
+        
         fig.add_trace(go.Surface(x=X_grid, y=Y_grid, z=np.full((50, 50), -hedef_derinlik), surfacecolor=grid_z, colorscale=[[0, 'red'], [0.25, 'orange'], [0.5, 'green'], [1.0, 'darkgreen']], cmin=0.5, cmax=2.0, opacity=0.6, showscale=True))
 
     fig.update_layout(template="plotly_dark", margin=dict(l=0, r=0, b=0, t=0), height=700, scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=0.5)))
@@ -70,6 +73,7 @@ def ciz_2d(df, secili_kuyular):
         for _, row in kesit_df[kesit_df['Sondaj_No'] == kuyu].iterrows():
             px_vals.append(kuyu_konumlari[kuyu]); pz_vals.append(-row['Derinlik_m']); vfs.append(row['FS'])
 
+    # 2B Kesit haritasında pürüzsüz kontur geçişleri
     if len(px_vals) > 4:
         grid_x, grid_z = np.meshgrid(np.linspace(min(px_vals), max(px_vals), 100), np.linspace(min(pz_vals), 0, 100))
         fig.add_trace(go.Contour(x=np.linspace(min(px_vals), max(px_vals), 100), y=np.linspace(min(pz_vals), 0, 100), z=griddata((px_vals, pz_vals), vfs, (grid_x, grid_z), method='linear'), colorscale=[[0, 'red'], [0.3, 'orange'], [0.6, 'green'], [1.0, 'darkgreen']], zmin=0.5, zmax=2.0, opacity=0.45, showscale=True))
@@ -91,6 +95,7 @@ def ciz_vaziyet(kuyu_oturmalari):
     yi = np.linspace(y_min - pad_y, y_max + pad_y, 100)
     X_grid, Y_grid = np.meshgrid(xi, yi)
     
+    # Vaziyet planı izohips haritasında doğrusal pürüzsüzleştirme
     Z_grid = griddata(kuyu_oturmalari[['X_Koordinat_m', 'Y_Koordinat_m']].values, kuyu_oturmalari['Toplam_Oturma_cm'].values, (X_grid, Y_grid), method='linear')
 
     fig.add_trace(go.Contour(x=xi, y=yi, z=Z_grid, colorscale='Reds', contours=dict(showlabels=True, labelfont=dict(size=14, color='white')), colorbar=dict(title="Oturma (cm)", thickness=20)))
