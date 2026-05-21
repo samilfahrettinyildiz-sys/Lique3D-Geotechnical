@@ -20,15 +20,18 @@ def ciz_3d(df, hedef_derinlik):
     # Zemin yüzeyini temsil eden taban düzlem
     fig.add_trace(go.Mesh3d(x=[-pad, max_x+pad, max_x+pad, -pad], y=[-pad, -pad, max_y+pad, max_y+pad], z=[0,0,0,0], i=[0,0], j=[1,2], k=[2,3], opacity=0.1, color='white', hoverinfo='none'))
 
+    # Her benzersiz sondajın en üst noktasına kurumsal etiket basılması
     for sondaj in df['Sondaj_No'].unique():
         temp = df[df['Sondaj_No'] == sondaj].sort_values('Derinlik_m')
         
+        # Kuyunun çizgisi ve derinlik boyunca katman noktaları
         fig.add_trace(go.Scatter3d(
             x=temp['X_Koordinat_m'], y=temp['Y_Koordinat_m'], z=-temp['Derinlik_m'], mode='lines+markers',
             marker=dict(size=6, color=temp['Renk'], line=dict(width=1, color='black')), line=dict(color='rgba(255,255,255,0.4)', width=5),
             text=[f"Sondaj: {s}<br>Zemin: {z}<br>FS: {f:.2f}<br>Oturma: {o:.2f} cm" for s,z,f,o in zip(temp['Sondaj_No'], temp['Zemin_Sinifi'], temp['FS'], temp['Tabaka_Oturmasi_cm'])], hoverinfo='text', name=sondaj
         ))
         
+        # Tam zemin yüzeyi kotu (Z=0) için elit grafik tasarımı
         en_ust_nokta = temp.iloc[0]
         fig.add_trace(go.Scatter3d(
             x=[en_ust_nokta['X_Koordinat_m']], 
@@ -37,31 +40,33 @@ def ciz_3d(df, hedef_derinlik):
             mode='text', 
             text=[f"<b>{sondaj}</b>"], 
             textposition='top center',
-            textfont=dict(family='Helvetica Neue, Helvetica, Arial, sans-serif', size=12, color='#E0E0E0'),
+            textfont=dict(
+                family='Helvetica Neue, Helvetica, Arial, sans-serif', 
+                size=12, 
+                color='#E0E0E0' 
+            ),
             showlegend=False,
             hoverinfo='none'
         ))
 
-    # 3B DİLİM HARİTASI
+    # GÜVENLİ LİMANA DÖNÜŞ: Sismik Risk Haritasını solid (katı) yapıyoruz
     dilim_df = df[(df['Derinlik_m'] >= hedef_derinlik - 2.5) & (df['Derinlik_m'] <= hedef_derinlik + 2.5)].dropna(subset=['X_Koordinat_m', 'Y_Koordinat_m', 'FS'])
     if len(dilim_df['Sondaj_No'].unique()) >= 3: 
         isi_veri = dilim_df.sort_values(by="Derinlik_m", key=lambda x: abs(x - hedef_derinlik)).groupby('Sondaj_No').first().reset_index()
-        X_grid, Y_grid = np.meshgrid(np.linspace(-pad, max_x+pad, 50), np.linspace(-pad, max_y+pad, 50))
+        # Izgara ağını biraz daha kaba yapıyoruz ki 'nearest' blokları daha hızlı çizilsin
+        X_grid, Y_grid = np.meshgrid(np.linspace(-pad, max_x+pad, 30), np.linspace(-pad, max_y+pad, 30))
         
-        # Linear kullanarak içeriyi pürüzsüz yapıyoruz (Dışarısı NaN olacak)
-        grid_z = griddata(isi_veri[['X_Koordinat_m', 'Y_Koordinat_m']].values, isi_veri['FS'].values, (X_grid, Y_grid), method='linear')
+        # METHOD DEĞİŞTİ: Hatalı 'linear' yerine 'nearest' çekildi. Bu sahanın tamamını boyar, asla şeffaf delik bırakmaz.
+        grid_z = griddata(isi_veri[['X_Koordinat_m', 'Y_Koordinat_m']].values, isi_veri['FS'].values, (X_grid, Y_grid), method='nearest')
         
-        # KRAL DOKUNUŞ: Sınır Dışı Maskeleme (Clipping)
-        # grid_z'nin hesaplanamadığı (kuyuların dışındaki okyanus) yerlerde Z koordinatını da siliyoruz!
-        Z_surface = np.full((50, 50), -float(hedef_derinlik))
-        Z_surface[np.isnan(grid_z)] = np.nan 
-        
-        fig.add_trace(go.Surface(x=X_grid, y=Y_grid, z=Z_surface, surfacecolor=grid_z, colorscale=[[0, 'red'], [0.25, 'orange'], [0.5, 'green'], [1.0, 'darkgreen']], cmin=0.5, cmax=2.0, opacity=0.6, showscale=True))
+        # Pürüzsüzleştirme ve maskeleme kodları kaldırıldı, Z koordinatı solid kalıyor.
+        fig.add_trace(go.Surface(x=X_grid, y=Y_grid, z=np.full(X_grid.shape, -float(hedef_derinlik)), surfacecolor=grid_z, colorscale=[[0, 'red'], [0.25, 'orange'], [0.5, 'green'], [1.0, 'darkgreen']], cmin=0.5, cmax=2.0, opacity=0.6, showscale=True))
 
     fig.update_layout(template="plotly_dark", margin=dict(l=0, r=0, b=0, t=0), height=700, scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=0.5)))
     return fig
 
 def ciz_2d(df, secili_kuyular):
+    # 2B Kesit haritası için doğrusal pürüzsüzleştirme uygundur, değiştirilmedi.
     fig = go.Figure()
     kesit_df = df[df['Sondaj_No'].isin(secili_kuyular)]
     kuyu_konumlari = kesit_df.groupby('Sondaj_No')['X_Koordinat_m'].mean().sort_values()
@@ -83,17 +88,18 @@ def ciz_2d(df, secili_kuyular):
     return fig
 
 def ciz_vaziyet(kuyu_oturmalari):
+    # Vaziyet planı izohips haritasında da 'linear' yerine 'nearest' kullanarak solid bir zemin elde ediyoruz.
     fig = go.Figure()
     x_min, x_max = kuyu_oturmalari['X_Koordinat_m'].min(), kuyu_oturmalari['X_Koordinat_m'].max()
     y_min, y_max = kuyu_oturmalari['Y_Koordinat_m'].min(), kuyu_oturmalari['Y_Koordinat_m'].max()
     pad_x, pad_y = max(10, (x_max - x_min)*0.1), max(10, (y_max - y_min)*0.1)
     
-    xi = np.linspace(x_min - pad_x, x_max + pad_x, 100)
-    yi = np.linspace(y_min - pad_y, y_max + pad_y, 100)
+    xi = np.linspace(x_min - pad_x, x_max + pad_x, 50)
+    yi = np.linspace(y_min - pad_y, y_max + pad_y, 50)
     X_grid, Y_grid = np.meshgrid(xi, yi)
     
-    # Linear pürüzsüzleştirme (Contour grafiği NaN'leri otomatik siler, o yüzden maskeye gerek yok)
-    Z_grid = griddata(kuyu_oturmalari[['X_Koordinat_m', 'Y_Koordinat_m']].values, kuyu_oturmalari['Toplam_Oturma_cm'].values, (X_grid, Y_grid), method='linear')
+    # METHOD DEĞİŞTİ: Vaziyet planında da köşeli ama solid (nearest) boyama yapıyoruz.
+    Z_grid = griddata(kuyu_oturmalari[['X_Koordinat_m', 'Y_Koordinat_m']].values, kuyu_oturmalari['Toplam_Oturma_cm'].values, (X_grid, Y_grid), method='nearest')
 
     fig.add_trace(go.Contour(x=xi, y=yi, z=Z_grid, colorscale='Reds', contours=dict(showlabels=True, labelfont=dict(size=14, color='white')), colorbar=dict(title="Oturma (cm)", thickness=20)))
     fig.add_trace(go.Scatter(x=kuyu_oturmalari['X_Koordinat_m'], y=kuyu_oturmalari['Y_Koordinat_m'], mode='markers+text', marker=dict(size=14, color='black', symbol='cross', line=dict(color='white', width=1)), text=kuyu_oturmalari['Sondaj_No'] + "<br>" + kuyu_oturmalari['Toplam_Oturma_cm'].round(1).astype(str) + " cm", textposition="top center", textfont=dict(color='white', size=13, weight='bold')))
