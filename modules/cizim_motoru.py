@@ -12,6 +12,7 @@ def ciz_spektrum(T_vals, Sae_vals, TA, TB, etiket):
 
 def ciz_3d(df, hedef_derinlik):
     fig = go.Figure()
+    # Koordinat sınırlarını ve padding'i hesapla
     max_x_raw, max_y_raw = df['X_Koordinat_m'].max(), df['Y_Koordinat_m'].max()
     max_extent = max(max_x_raw, max_y_raw, 100)
     max_x, max_y = max(max_x_raw, max_extent * 0.4), max(max_y_raw, max_extent * 0.4)
@@ -20,7 +21,7 @@ def ciz_3d(df, hedef_derinlik):
     # Zemin yüzeyini temsil eden taban düzlem
     fig.add_trace(go.Mesh3d(x=[-pad, max_x+pad, max_x+pad, -pad], y=[-pad, -pad, max_y+pad, max_y+pad], z=[0,0,0,0], i=[0,0], j=[1,2], k=[2,3], opacity=0.1, color='white', hoverinfo='none'))
 
-    # Her benzersiz sondajın en üst noktasına kurumsal etiket basılması
+    # Her benzersiz sondajın tepesine kurumsal etiket basılması ve kuyu çizgileri
     for sondaj in df['Sondaj_No'].unique():
         temp = df[df['Sondaj_No'] == sondaj].sort_values('Derinlik_m')
         
@@ -49,14 +50,15 @@ def ciz_3d(df, hedef_derinlik):
             hoverinfo='none'
         ))
 
-    # KRAL DOKUNUŞ: 3B Dilim haritasını 'linear' interpolasyon ile pürüzsüz (smooth) yapıyoruz
+    # GÜVENLİ LİMANA DÖNÜŞ: 'linear' interpolasyon 'nearest' ile değiştirildi
+    # Belirli derinlikteki sıvılaşma risk (izohips) dilimi
     dilim_df = df[(df['Derinlik_m'] >= hedef_derinlik - 2.5) & (df['Derinlik_m'] <= hedef_derinlik + 2.5)].dropna(subset=['X_Koordinat_m', 'Y_Koordinat_m', 'FS'])
     if len(dilim_df['Sondaj_No'].unique()) >= 3: 
         isi_veri = dilim_df.sort_values(by="Derinlik_m", key=lambda x: abs(x - hedef_derinlik)).groupby('Sondaj_No').first().reset_index()
         X_grid, Y_grid = np.meshgrid(np.linspace(-pad, max_x+pad, 50), np.linspace(-pad, max_y+pad, 50))
         
-        # METHOD DEĞİŞTİ: 'nearest' yerine 'linear' çekilerek köşeli geçişler engellendi
-        grid_z = griddata(isi_veri[['X_Koordinat_m', 'Y_Koordinat_m']].values, isi_veri['FS'].values, (X_grid, Y_grid), method='linear')
+        # METHOD DEĞİŞTİ: 'linear' yerine tekrar 'nearest' çekilerek sahadaki risk abartılmadan gösteriliyor.
+        grid_z = griddata(isi_veri[['X_Koordinat_m', 'Y_Koordinat_m']].values, isi_veri['FS'].values, (X_grid, Y_grid), method='nearest')
         
         fig.add_trace(go.Surface(x=X_grid, y=Y_grid, z=np.full((50, 50), -hedef_derinlik), surfacecolor=grid_z, colorscale=[[0, 'red'], [0.25, 'orange'], [0.5, 'green'], [1.0, 'darkgreen']], cmin=0.5, cmax=2.0, opacity=0.6, showscale=True))
 
@@ -64,6 +66,7 @@ def ciz_3d(df, hedef_derinlik):
     return fig
 
 def ciz_2d(df, secili_kuyular):
+    # 2B Kesit kodları zaten kararlı çalışıyor, değiştirilmedi.
     fig = go.Figure()
     kesit_df = df[df['Sondaj_No'].isin(secili_kuyular)]
     kuyu_konumlari = kesit_df.groupby('Sondaj_No')['X_Koordinat_m'].mean().sort_values()
@@ -73,7 +76,7 @@ def ciz_2d(df, secili_kuyular):
         for _, row in kesit_df[kesit_df['Sondaj_No'] == kuyu].iterrows():
             px_vals.append(kuyu_konumlari[kuyu]); pz_vals.append(-row['Derinlik_m']); vfs.append(row['FS'])
 
-    # 2B Kesit haritasında pürüzsüz kontur geçişleri
+    # 2B Kesit haritasında interpolasyon zaten 'linear' kalabilir, çünkü tek bir kesit hatti inceleniyor.
     if len(px_vals) > 4:
         grid_x, grid_z = np.meshgrid(np.linspace(min(px_vals), max(px_vals), 100), np.linspace(min(pz_vals), 0, 100))
         fig.add_trace(go.Contour(x=np.linspace(min(px_vals), max(px_vals), 100), y=np.linspace(min(pz_vals), 0, 100), z=griddata((px_vals, pz_vals), vfs, (grid_x, grid_z), method='linear'), colorscale=[[0, 'red'], [0.3, 'orange'], [0.6, 'green'], [1.0, 'darkgreen']], zmin=0.5, zmax=2.0, opacity=0.45, showscale=True))
@@ -86,6 +89,7 @@ def ciz_2d(df, secili_kuyular):
     return fig
 
 def ciz_vaziyet(kuyu_oturmalari):
+    # GÜVENLİ LİMANA DÖNÜŞ: Vaziyet planı izohips haritasında doğrusal pürüzsüzleştirme 'nearest' ile değiştirildi.
     fig = go.Figure()
     x_min, x_max = kuyu_oturmalari['X_Koordinat_m'].min(), kuyu_oturmalari['X_Koordinat_m'].max()
     y_min, y_max = kuyu_oturmalari['Y_Koordinat_m'].min(), kuyu_oturmalari['Y_Koordinat_m'].max()
@@ -95,8 +99,8 @@ def ciz_vaziyet(kuyu_oturmalari):
     yi = np.linspace(y_min - pad_y, y_max + pad_y, 100)
     X_grid, Y_grid = np.meshgrid(xi, yi)
     
-    # Vaziyet planı izohips haritasında doğrusal pürüzsüzleştirme
-    Z_grid = griddata(kuyu_oturmalari[['X_Koordinat_m', 'Y_Koordinat_m']].values, kuyu_oturmalari['Toplam_Oturma_cm'].values, (X_grid, Y_grid), method='linear')
+    # METHOD DEĞİŞTİ: 'linear' yerine tekrar 'nearest' çekilerek sahadaki risk abartılmadan gösteriliyor.
+    Z_grid = griddata(kuyu_oturmalari[['X_Koordinat_m', 'Y_Koordinat_m']].values, kuyu_oturmalari['Toplam_Oturma_cm'].values, (X_grid, Y_grid), method='nearest')
 
     fig.add_trace(go.Contour(x=xi, y=yi, z=Z_grid, colorscale='Reds', contours=dict(showlabels=True, labelfont=dict(size=14, color='white')), colorbar=dict(title="Oturma (cm)", thickness=20)))
     fig.add_trace(go.Scatter(x=kuyu_oturmalari['X_Koordinat_m'], y=kuyu_oturmalari['Y_Koordinat_m'], mode='markers+text', marker=dict(size=14, color='black', symbol='cross', line=dict(color='white', width=1)), text=kuyu_oturmalari['Sondaj_No'] + "<br>" + kuyu_oturmalari['Toplam_Oturma_cm'].round(1).astype(str) + " cm", textposition="top center", textfont=dict(color='white', size=13, weight='bold')))
