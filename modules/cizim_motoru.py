@@ -20,7 +20,7 @@ def ciz_3d(df, hedef_derinlik):
     # Zemin yüzeyini temsil eden taban düzlem
     fig.add_trace(go.Mesh3d(x=[-pad, max_x+pad, max_x+pad, -pad], y=[-pad, -pad, max_y+pad, max_y+pad], z=[0,0,0,0], i=[0,0], j=[1,2], k=[2,3], opacity=0.1, color='white', hoverinfo='none'))
 
-    # KRAL DOKUNUŞ: Her benzersiz sondajın en üst noktasına (0 kotuna) isim etiketini basıyoruz
+    # Her benzersiz sondajın en üst noktasına kurumsal etiket basılması
     for sondaj in df['Sondaj_No'].unique():
         temp = df[df['Sondaj_No'] == sondaj].sort_values('Derinlik_m')
         
@@ -31,21 +31,25 @@ def ciz_3d(df, hedef_derinlik):
             text=[f"Sondaj: {s}<br>Zemin: {z}<br>FS: {f:.2f}<br>Oturma: {o:.2f} cm" for s,z,f,o in zip(temp['Sondaj_No'], temp['Zemin_Sinifi'], temp['FS'], temp['Tabaka_Oturmasi_cm'])], hoverinfo='text', name=sondaj
         ))
         
-        # Sadece en üst kottaki (Z=0) ilk noktayı alıp üzerine kalıcı yazı basıyoruz
+        # Tam zemin yüzeyi kotu (Z=0) için elit grafik tasarımı
         en_ust_nokta = temp.iloc[0]
         fig.add_trace(go.Scatter3d(
             x=[en_ust_nokta['X_Koordinat_m']], 
             y=[en_ust_nokta['Y_Koordinat_m']], 
-            z=[0.0], # Tam zemin yüzeyi kotu
-            mode='text', # Sadece metin göstereceğiz, marker kalabalığı yapmasın
-            text=[str(sondaj)],
+            z=[0.0], 
+            mode='text', 
+            text=[f"<b>{sondaj}</b>"], # Kalın font ama kibar durması için HTML tag kullandık
             textposition='top center',
-            textfont=dict(family='Arial Black', size=13, color='yellow'), # Ekranda parlasın diye sarı yaptık
+            textfont=dict(
+                family='Helvetica Neue, Helvetica, Arial, sans-serif', # Premium kurumsal yazı tipi
+                size=12, 
+                color='#E0E0E0' # Mat gümüş/beyaz tonu, gözü yormaz ve elit durur
+            ),
             showlegend=False,
             hoverinfo='none'
         ))
 
-    # Belirli derinlikteki sıvılaşma risk (izohips) dilimi
+    # Belirli derinlikteki sivilasma risk (izohips) dilimi
     dilim_df = df[(df['Derinlik_m'] >= hedef_derinlik - 2.5) & (df['Derinlik_m'] <= hedef_derinlik + 2.5)].dropna(subset=['X_Koordinat_m', 'Y_Koordinat_m', 'FS'])
     if len(dilim_df['Sondaj_No'].unique()) >= 3: 
         isi_veri = dilim_df.sort_values(by="Derinlik_m", key=lambda x: abs(x - hedef_derinlik)).groupby('Sondaj_No').first().reset_index()
