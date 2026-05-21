@@ -12,7 +12,6 @@ def ciz_spektrum(T_vals, Sae_vals, TA, TB, etiket):
 
 def ciz_3d(df, hedef_derinlik):
     fig = go.Figure()
-    # Koordinat sınırlarını ve padding'i hesapla
     max_x_raw, max_y_raw = df['X_Koordinat_m'].max(), df['Y_Koordinat_m'].max()
     max_extent = max(max_x_raw, max_y_raw, 100)
     max_x, max_y = max(max_x_raw, max_extent * 0.4), max(max_y_raw, max_extent * 0.4)
@@ -21,18 +20,15 @@ def ciz_3d(df, hedef_derinlik):
     # Zemin yüzeyini temsil eden taban düzlem
     fig.add_trace(go.Mesh3d(x=[-pad, max_x+pad, max_x+pad, -pad], y=[-pad, -pad, max_y+pad, max_y+pad], z=[0,0,0,0], i=[0,0], j=[1,2], k=[2,3], opacity=0.1, color='white', hoverinfo='none'))
 
-    # Her benzersiz sondajın tepesine kurumsal etiket basılması ve kuyu çizgileri
     for sondaj in df['Sondaj_No'].unique():
         temp = df[df['Sondaj_No'] == sondaj].sort_values('Derinlik_m')
         
-        # Kuyunun çizgisi ve derinlik boyunca katman noktaları
         fig.add_trace(go.Scatter3d(
             x=temp['X_Koordinat_m'], y=temp['Y_Koordinat_m'], z=-temp['Derinlik_m'], mode='lines+markers',
             marker=dict(size=6, color=temp['Renk'], line=dict(width=1, color='black')), line=dict(color='rgba(255,255,255,0.4)', width=5),
             text=[f"Sondaj: {s}<br>Zemin: {z}<br>FS: {f:.2f}<br>Oturma: {o:.2f} cm" for s,z,f,o in zip(temp['Sondaj_No'], temp['Zemin_Sinifi'], temp['FS'], temp['Tabaka_Oturmasi_cm'])], hoverinfo='text', name=sondaj
         ))
         
-        # Tam zemin yüzeyi kotu (Z=0) için elit grafik tasarımı
         en_ust_nokta = temp.iloc[0]
         fig.add_trace(go.Scatter3d(
             x=[en_ust_nokta['X_Koordinat_m']], 
@@ -41,32 +37,31 @@ def ciz_3d(df, hedef_derinlik):
             mode='text', 
             text=[f"<b>{sondaj}</b>"], 
             textposition='top center',
-            textfont=dict(
-                family='Helvetica Neue, Helvetica, Arial, sans-serif', 
-                size=12, 
-                color='#E0E0E0' 
-            ),
+            textfont=dict(family='Helvetica Neue, Helvetica, Arial, sans-serif', size=12, color='#E0E0E0'),
             showlegend=False,
             hoverinfo='none'
         ))
 
-    # GÜVENLİ LİMANA DÖNÜŞ: 'linear' interpolasyon 'nearest' ile değiştirildi
-    # Belirli derinlikteki sıvılaşma risk (izohips) dilimi
+    # 3B DİLİM HARİTASI
     dilim_df = df[(df['Derinlik_m'] >= hedef_derinlik - 2.5) & (df['Derinlik_m'] <= hedef_derinlik + 2.5)].dropna(subset=['X_Koordinat_m', 'Y_Koordinat_m', 'FS'])
     if len(dilim_df['Sondaj_No'].unique()) >= 3: 
         isi_veri = dilim_df.sort_values(by="Derinlik_m", key=lambda x: abs(x - hedef_derinlik)).groupby('Sondaj_No').first().reset_index()
         X_grid, Y_grid = np.meshgrid(np.linspace(-pad, max_x+pad, 50), np.linspace(-pad, max_y+pad, 50))
         
-        # METHOD DEĞİŞTİ: 'linear' yerine tekrar 'nearest' çekilerek sahadaki risk abartılmadan gösteriliyor.
-        grid_z = griddata(isi_veri[['X_Koordinat_m', 'Y_Koordinat_m']].values, isi_veri['FS'].values, (X_grid, Y_grid), method='nearest')
+        # Linear kullanarak içeriyi pürüzsüz yapıyoruz (Dışarısı NaN olacak)
+        grid_z = griddata(isi_veri[['X_Koordinat_m', 'Y_Koordinat_m']].values, isi_veri['FS'].values, (X_grid, Y_grid), method='linear')
         
-        fig.add_trace(go.Surface(x=X_grid, y=Y_grid, z=np.full((50, 50), -hedef_derinlik), surfacecolor=grid_z, colorscale=[[0, 'red'], [0.25, 'orange'], [0.5, 'green'], [1.0, 'darkgreen']], cmin=0.5, cmax=2.0, opacity=0.6, showscale=True))
+        # KRAL DOKUNUŞ: Sınır Dışı Maskeleme (Clipping)
+        # grid_z'nin hesaplanamadığı (kuyuların dışındaki okyanus) yerlerde Z koordinatını da siliyoruz!
+        Z_surface = np.full((50, 50), -float(hedef_derinlik))
+        Z_surface[np.isnan(grid_z)] = np.nan 
+        
+        fig.add_trace(go.Surface(x=X_grid, y=Y_grid, z=Z_surface, surfacecolor=grid_z, colorscale=[[0, 'red'], [0.25, 'orange'], [0.5, 'green'], [1.0, 'darkgreen']], cmin=0.5, cmax=2.0, opacity=0.6, showscale=True))
 
     fig.update_layout(template="plotly_dark", margin=dict(l=0, r=0, b=0, t=0), height=700, scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=0.5)))
     return fig
 
 def ciz_2d(df, secili_kuyular):
-    # 2B Kesit kodları zaten kararlı çalışıyor, değiştirilmedi.
     fig = go.Figure()
     kesit_df = df[df['Sondaj_No'].isin(secili_kuyular)]
     kuyu_konumlari = kesit_df.groupby('Sondaj_No')['X_Koordinat_m'].mean().sort_values()
@@ -76,7 +71,6 @@ def ciz_2d(df, secili_kuyular):
         for _, row in kesit_df[kesit_df['Sondaj_No'] == kuyu].iterrows():
             px_vals.append(kuyu_konumlari[kuyu]); pz_vals.append(-row['Derinlik_m']); vfs.append(row['FS'])
 
-    # 2B Kesit haritasında interpolasyon zaten 'linear' kalabilir, çünkü tek bir kesit hatti inceleniyor.
     if len(px_vals) > 4:
         grid_x, grid_z = np.meshgrid(np.linspace(min(px_vals), max(px_vals), 100), np.linspace(min(pz_vals), 0, 100))
         fig.add_trace(go.Contour(x=np.linspace(min(px_vals), max(px_vals), 100), y=np.linspace(min(pz_vals), 0, 100), z=griddata((px_vals, pz_vals), vfs, (grid_x, grid_z), method='linear'), colorscale=[[0, 'red'], [0.3, 'orange'], [0.6, 'green'], [1.0, 'darkgreen']], zmin=0.5, zmax=2.0, opacity=0.45, showscale=True))
@@ -89,7 +83,6 @@ def ciz_2d(df, secili_kuyular):
     return fig
 
 def ciz_vaziyet(kuyu_oturmalari):
-    # GÜVENLİ LİMANA DÖNÜŞ: Vaziyet planı izohips haritasında doğrusal pürüzsüzleştirme 'nearest' ile değiştirildi.
     fig = go.Figure()
     x_min, x_max = kuyu_oturmalari['X_Koordinat_m'].min(), kuyu_oturmalari['X_Koordinat_m'].max()
     y_min, y_max = kuyu_oturmalari['Y_Koordinat_m'].min(), kuyu_oturmalari['Y_Koordinat_m'].max()
@@ -99,8 +92,8 @@ def ciz_vaziyet(kuyu_oturmalari):
     yi = np.linspace(y_min - pad_y, y_max + pad_y, 100)
     X_grid, Y_grid = np.meshgrid(xi, yi)
     
-    # METHOD DEĞİŞTİ: 'linear' yerine tekrar 'nearest' çekilerek sahadaki risk abartılmadan gösteriliyor.
-    Z_grid = griddata(kuyu_oturmalari[['X_Koordinat_m', 'Y_Koordinat_m']].values, kuyu_oturmalari['Toplam_Oturma_cm'].values, (X_grid, Y_grid), method='nearest')
+    # Linear pürüzsüzleştirme (Contour grafiği NaN'leri otomatik siler, o yüzden maskeye gerek yok)
+    Z_grid = griddata(kuyu_oturmalari[['X_Koordinat_m', 'Y_Koordinat_m']].values, kuyu_oturmalari['Toplam_Oturma_cm'].values, (X_grid, Y_grid), method='linear')
 
     fig.add_trace(go.Contour(x=xi, y=yi, z=Z_grid, colorscale='Reds', contours=dict(showlabels=True, labelfont=dict(size=14, color='white')), colorbar=dict(title="Oturma (cm)", thickness=20)))
     fig.add_trace(go.Scatter(x=kuyu_oturmalari['X_Koordinat_m'], y=kuyu_oturmalari['Y_Koordinat_m'], mode='markers+text', marker=dict(size=14, color='black', symbol='cross', line=dict(color='white', width=1)), text=kuyu_oturmalari['Sondaj_No'] + "<br>" + kuyu_oturmalari['Toplam_Oturma_cm'].round(1).astype(str) + " cm", textposition="top center", textfont=dict(color='white', size=13, weight='bold')))
