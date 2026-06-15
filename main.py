@@ -10,9 +10,13 @@ st.title("Lique3D: Geoteknik Analiz ve Sismik Iyilestirme Sistemi")
 st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ve Statik Tasarim Motoru*")
 
 # 1. YAN MENU ARAYUZU
-st.sidebar.header("1. Veri Kaynağı ve Giriş Yöntemi")
+# ... (Üst kısımdaki importlar ve AFAD ayarları aynı kalacak) ...
 
-# Hibrit Veri Giriş Seçicisi
+# En tepeye boş bir veri sepeti koyuyoruz (KÖPRÜ BURASI)
+ham_df = None 
+
+# 1. YAN MENÜ ARAYÜZÜ
+st.sidebar.header("1. Veri Kaynağı ve Giriş Yöntemi")
 veri_giris_modu = st.sidebar.radio(
     "Veri Giriş Yöntemi Seçiniz:", 
     ["📁 Çoklu Kuyu (CSV / Excel)", "📱 Hızlı Tek Kuyu (Manuel)"],
@@ -22,7 +26,8 @@ veri_giris_modu = st.sidebar.radio(
 # Senaryo A: Eski Sistem (CSV Yükleme)
 if veri_giris_modu == "📁 Çoklu Kuyu (CSV / Excel)":
     yuklenen_dosya = st.sidebar.file_uploader("Sondaj Verisi (CSV)", type=['csv'])
-    ham_df = csv_oku(yuklenen_dosya)
+    if yuklenen_dosya is not None:
+        ham_df = csv_oku(yuklenen_dosya) # Sepeti Excel ile doldurduk
 
 # Senaryo B: Yeni Sistem (Mobil Hızlı Giriş)
 else:
@@ -31,10 +36,9 @@ else:
     hizli_kuyu_adi = st.sidebar.text_input("Sondaj Kuyusu Adı", value="SK-01")
     hizli_yass = st.sidebar.number_input("Yeraltı Su Seviyesi - YASS (m)", value=2.0, step=0.5)
     
-    st.sidebar.markdown("### 📊 Tabaka Verileri (Dinamik Tablo)")
-    st.sidebar.info("Yeni tabaka eklemek için tablonun en altındaki satıra tıklayın.")
+    st.sidebar.markdown("### 📊 Tabaka Verileri")
+    st.sidebar.info("Yeni tabaka eklemek için tablonun altına tıklayın.")
     
-    # Başlangıç için boş veya tek satırlık şablon DataFrame
     sablon_df = pd.DataFrame({
         "Derinlik_m": [1.5, 3.0, 4.5],
         "N_arazi": [10, 15, 12],
@@ -43,25 +47,48 @@ else:
         "Zemin_Sinifi": ["SM", "SC", "SP"]
     })
     
-    # Kullanıcının satır ekleyip silebildiği sihirli Streamlit tablosu
-    hizli_veri_df = st.sidebar.data_editor(
-        sablon_df, 
-        num_rows="dynamic", # Sınır yok, adam 60 metre de girer!
-        use_container_width=True,
-        hide_index=True
-    )
+    hizli_veri_df = st.sidebar.data_editor(sablon_df, num_rows="dynamic", use_container_width=True, hide_index=True)
     
-    # Sistemi tetikleyecek buton
     if st.sidebar.button("🚀 Verileri Analiz Et", use_container_width=True):
-        # Girilen dinamik tabloyu arka planda bizim hesap motorunun istediği formata sokuyoruz
-        ham_df = hizli_veri_df.copy()
-        ham_df['Sondaj_No'] = hizli_kuyu_adi
-        ham_df['GYS_m'] = hizli_yass
-        # Tek kuyu olduğu için koordinatları bypass ediyoruz (Motor çökmesin diye)
-        ham_df['X_Koordinat_m'] = 0.0
-        ham_df['Y_Koordinat_m'] = 0.0
-        ham_df['Enlem'] = 0.0 
-        ham_df['Boylam'] = 0.0
+        # Sepeti kullanıcının girdiği tablo ile dolduruyoruz
+        gecici_df = hizli_veri_df.copy()
+        gecici_df['Sondaj_No'] = hizli_kuyu_adi
+        gecici_df['GYS_m'] = hizli_yass
+        # Tek kuyu için harita koordinatlarını bypass ediyoruz
+        gecici_df['X_Koordinat_m'] = 0.0
+        gecici_df['Y_Koordinat_m'] = 0.0
+        gecici_df['Enlem'] = 0.0 
+        gecici_df['Boylam'] = 0.0
+        ham_df = gecici_df # Sepet doldu!
+
+# ---------------------------------------------------------
+# 2. SİSTEM ÇALIŞTIRMA VE GÖRSELLEŞTİRME
+# ---------------------------------------------------------
+try:
+    # Artık 'yuklenen_dosya' aramıyoruz. Sadece 'ham_df' dolu mu ona bakıyoruz.
+    if ham_df is not None and len(ham_df) > 0:
+        
+        # Analiz Modülünü Çağır
+        df, kuyu_oturmalari, s = geoteknik_analiz(
+            ham_df, pga_val, ss_val, s1_val, mw, ce_val, cb_val, cs_val, 
+            vs30_val, cu30_val, ze_ozel_kosul, zf_ozel_kosul, iyilestirme_aktif, 
+            tasarim_capi, tasarim_grid, proje_alani, birim_fiyat, kati_filtre_aktif
+        )
+
+        # Sekmeleri oluştur
+        tab_deprem, tab_param, tab_3d, tab_2d, tab_vaziyet, tab_ai, tab_rapor = st.tabs([
+            "Deprem Spektrumu", "Statik Tasarım", "3B Model", "2B Kesit", 
+            "İzohips Planı", "İyileştirme Simulasyonu", "Rapor Çıktısı"
+        ])
+        
+        # ... (Geri kalan tüm tab_... içerikleri eski kodunla birebir aynı kalacak) ...
+        # ...
+
+    else:
+        st.info("Sistemi çalıştırmak için CSV yükleyiniz veya Hızlı Giriş sekmesinden 'Analiz Et' butonuna basınız.")
+
+except Exception as e:
+    st.error(f"Sistem Hatası Oluştu: {e}")
 
 st.sidebar.header("2. Deprem ve Zemin")
 afad_dosya = st.sidebar.file_uploader("AFAD Raporu (PDF/TXT)", type=['pdf', 'txt', 'csv'])
