@@ -6,43 +6,80 @@ from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
 st.set_page_config(page_title="Lique3D Analiz Sistemi", layout="wide")
-st.title("Lique3D: Geoteknik Analiz ve Sismik Iyilestirme Sistemi")
-st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ve Statik Tasarim Motoru*")
+st.title("Lique3D: Geoteknik Analiz ve Sismik İyileştirme Sistemi")
+st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ve Statik Tasarım Motoru*")
 
-# 1. YAN MENU ARAYUZU
-# ... (Üst kısımdaki importlar ve AFAD ayarları aynı kalacak) ...
+# --- KÖPRÜ DEĞİŞKENLERİ (Hata almamak için en başta tanımlıyoruz) ---
+ham_df = None
+yuklenen_dosya = None 
 
-# En tepeye boş bir veri sepeti koyuyoruz (KÖPRÜ BURASI)
-ham_df = None 
-
-# 1. YAN MENÜ ARAYÜZÜ
-# ... (Üst kısımdaki importlar ve AFAD ayarları aynı kalacak) ...
-
-# 1. YAN MENÜ (Sadece Şalter ve Ayarlar)
+# ==========================================
+# 1. YAN MENÜ (ORTAK AYARLAR)
+# ==========================================
 st.sidebar.header("1. Veri Kaynağı ve Yöntem")
 veri_giris_modu = st.sidebar.radio(
     "Veri Giriş Yöntemi Seçiniz:", 
     ["📁 Çoklu Kuyu (CSV / Excel)", "📝 Hızlı Tek Kuyu (Manuel)"],
     index=0
 )
-# (AFAD ve diğer parametre ayarları yan menüde durmaya devam ediyor)
 
-# KÖPRÜ: Veri sepetimiz
-ham_df = None 
+st.sidebar.header("2. Deprem ve Zemin (AFAD)")
+afad_dosya = st.sidebar.file_uploader("AFAD Raporu (PDF/TXT)", type=['pdf', 'txt', 'csv'])
 
-# ---------------------------------------------------------
-# 2. ANA EKRAN: VERİ GİRİŞ ALANI (BÜYÜK ALAN)
-# ---------------------------------------------------------
+afad_verileri = {
+    "DD-1 (2475 Yıl)": {"PGA": 0.450, "Ss": 1.100, "S1": 0.350},
+    "DD-2 (475 Yıl)": {"PGA": 0.300, "Ss": 0.750, "S1": 0.250},
+    "DD-3 (72 Yıl)": {"PGA": 0.200, "Ss": 0.500, "S1": 0.150},
+    "DD-4 (43 Yıl)": {"PGA": 0.100, "Ss": 0.250, "S1": 0.080}
+}
+secilen_dd = st.sidebar.selectbox("Hedef Deprem Düzeyi", list(afad_verileri.keys()), index=1)
+
+# AFAD Regex okuma bloğun (Eski kodundaki gibi buraya gelecek)
+# ... (PDF/TXT okuma kodları) ...
+
+with st.sidebar.expander("İleri Sismik ve Laboratuvar Ayarları", expanded=False):
+    # İŞTE PATLAYAN YER BURASIYDI: Bu değerler her zaman tanımlanmış olmalı!
+    pga_val = st.number_input("PGA (İvme)", value=afad_verileri[secilen_dd]["PGA"], step=0.001, format="%.3f")
+    ss_val = st.number_input("Ss (Kısa Periyot)", value=afad_verileri[secilen_dd]["Ss"], step=0.001, format="%.3f")
+    s1_val = st.number_input("S1 (1.0sn Periyot)", value=afad_verileri[secilen_dd]["S1"], step=0.001, format="%.3f")
+    mw = st.slider("Deprem Büyüklüğü (Mw)", 6.0, 8.0, 7.5, 0.1)
+    
+    ce_val = st.number_input("Enerji Oranı (CE)", value=0.83, step=0.01)
+    cb_val = st.number_input("Kuyu Çapı (CB)", value=1.00, step=0.01)
+    cs_val = st.number_input("Numune Alıcı (CS)", value=1.00, step=0.01)
+    vs30_val = st.number_input("Ölçülen Vs30 (m/s)", value=0, step=10)
+    cu30_val = st.number_input("Laboratuvar Cu30 (kPa)", value=0, step=10)
+    ze_ozel_kosul = st.checkbox("ZE Özel Kil Koşulu")
+    zf_ozel_kosul = st.checkbox("ZF Özel Saha Koşulu")
+
+st.sidebar.header("3. Zemin İyileştirme")
+iyilestirme_aktif = st.sidebar.toggle("Jet-Grout / Taş Kolon Uygula", value=False)
+tasarim_capi = st.sidebar.selectbox("Kolon Çapı (cm)", [60, 80, 100, 120], index=1)
+tasarim_grid = st.sidebar.slider("Grid Aralığı (m)", 0.5, 4.0, 1.5, 0.1)
+
+with st.sidebar.expander("Proje ve Görsel Ayarlar", expanded=False):
+    proje_alani = st.number_input("İyileştirilecek Alan (m2)", value=3000, step=100)
+    birim_fiyat = st.number_input("Birim İmalat Fiyatı (TL/m)", value=850, step=50)
+    hedef_derinlik = st.slider("3B Harita Derinliği (m)", 1.0, 20.0, 5.0, 0.5)
+    kati_filtre_aktif = st.checkbox("TBDY Kil Şartını Koru", value=True)
+
+# ==========================================
+# 2. ANA EKRAN (VERİ GİRİŞ ALANI)
+# ==========================================
+@st.cache_data
+def csv_oku(dosya):
+    if dosya is not None:
+        return pd.read_csv(dosya, sep=';')
+    return None
+
 if veri_giris_modu == "📁 Çoklu Kuyu (CSV / Excel)":
     st.info("👈 Sol menüden deprem ayarlarınızı yapın ve aşağıdan CSV dosyanızı yükleyin.")
     yuklenen_dosya = st.file_uploader("Sondaj Verisi (CSV) Yükle", type=['csv'])
     if yuklenen_dosya is not None:
         ham_df = csv_oku(yuklenen_dosya)
 
-else: # HIZLI TEK KUYU MODU
+else:
     st.markdown("### 📝 Hızlı Tek Kuyu Veri Girişi")
-    
-    # Kuyu adı ve YASS yan yana şık dursun
     c1, c2 = st.columns(2)
     hizli_kuyu_adi = c1.text_input("Sondaj Kuyusu Adı", value="SK-01")
     hizli_yass = c2.number_input("Yeraltı Su Seviyesi - YASS (m)", value=2.0, step=0.5)
@@ -58,21 +95,41 @@ else: # HIZLI TEK KUYU MODU
         "Zemin_Sinifi": ["SM", "SC", "SP"]
     })
     
-    # Tablo artık ana ekranda, bütün genişliği kullanıyor!
     hizli_veri_df = st.data_editor(sablon_df, num_rows="dynamic", use_container_width=True, hide_index=True)
     
-    # Butona basıldığında sepeti doldur
     if st.button("🚀 Verileri Analiz Et", use_container_width=True):
         gecici_df = hizli_veri_df.copy()
         gecici_df['Sondaj_No'] = hizli_kuyu_adi
         gecici_df['GYS_m'] = hizli_yass
-        # Motor çökmesin diye koordinatları bypass ediyoruz
         gecici_df['X_Koordinat_m'] = 0.0
         gecici_df['Y_Koordinat_m'] = 0.0
         gecici_df['Enlem'] = 0.0 
         gecici_df['Boylam'] = 0.0
         ham_df = gecici_df
 
+# ==========================================
+# 3. SİSTEM ÇALIŞTIRMA VE GÖRSELLEŞTİRME
+# ==========================================
+try:
+    # DİKKAT: Eski kodundaki 'ham_df = csv_oku(yuklenen_dosya)' satırını BURADAN SİLDİK!
+    
+    if ham_df is not None and len(ham_df) > 0:
+        st.divider()
+        
+        # Artık pga_val ve diğer tüm değişkenler güvenle tanımlandı
+        df, kuyu_oturmalari, s = geoteknik_analiz(
+            ham_df, pga_val, ss_val, s1_val, mw, ce_val, cb_val, cs_val, 
+            vs30_val, cu30_val, ze_ozel_kosul, zf_ozel_kosul, iyilestirme_aktif, 
+            tasarim_capi, tasarim_grid, proje_alani, birim_fiyat, kati_filtre_aktif
+        )
+
+        tab_deprem, tab_param, tab_3d, tab_2d, tab_vaziyet, tab_ai, tab_rapor = st.tabs([
+            "Deprem Spektrumu", "Statik Tasarım", "3B Model", "2B Kesit", 
+            "İzohips Planı", "İyileştirme Simulasyonu", "Rapor Çıktısı"
+        ])
+        
+        # ... (Geri kalan tabların içindeki çizim ve rapor kodların aynı kalacak) ...
+        # ...
 # ---------------------------------------------------------
 # 3. SİSTEM ÇALIŞTIRMA VE GÖRSELLEŞTİRME
 # ---------------------------------------------------------
