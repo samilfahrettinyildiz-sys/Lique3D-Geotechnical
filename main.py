@@ -10,8 +10,58 @@ st.title("Lique3D: Geoteknik Analiz ve Sismik Iyilestirme Sistemi")
 st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ve Statik Tasarim Motoru*")
 
 # 1. YAN MENU ARAYUZU
-st.sidebar.header("1. Veri Kaynagi")
-yuklenen_dosya = st.sidebar.file_uploader("Sondaj Verisi (CSV)", type=['csv'])
+st.sidebar.header("1. Veri Kaynağı ve Giriş Yöntemi")
+
+# Hibrit Veri Giriş Seçicisi
+veri_giris_modu = st.sidebar.radio(
+    "Veri Giriş Yöntemi Seçiniz:", 
+    ["📁 Çoklu Kuyu (CSV / Excel)", "📱 Hızlı Tek Kuyu (Manuel)"],
+    index=0
+)
+
+# Senaryo A: Eski Sistem (CSV Yükleme)
+if veri_giris_modu == "📁 Çoklu Kuyu (CSV / Excel)":
+    yuklenen_dosya = st.sidebar.file_uploader("Sondaj Verisi (CSV)", type=['csv'])
+    ham_df = csv_oku(yuklenen_dosya)
+
+# Senaryo B: Yeni Sistem (Mobil Hızlı Giriş)
+else:
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📝 Kuyu Temel Bilgileri")
+    hizli_kuyu_adi = st.sidebar.text_input("Sondaj Kuyusu Adı", value="SK-01")
+    hizli_yass = st.sidebar.number_input("Yeraltı Su Seviyesi - YASS (m)", value=2.0, step=0.5)
+    
+    st.sidebar.markdown("### 📊 Tabaka Verileri (Dinamik Tablo)")
+    st.sidebar.info("Yeni tabaka eklemek için tablonun en altındaki satıra tıklayın.")
+    
+    # Başlangıç için boş veya tek satırlık şablon DataFrame
+    sablon_df = pd.DataFrame({
+        "Derinlik_m": [1.5, 3.0, 4.5],
+        "N_arazi": [10, 15, 12],
+        "FC": [15.0, 20.0, 10.0],
+        "PI": [0.0, 0.0, 0.0],
+        "Zemin_Sinifi": ["SM", "SC", "SP"]
+    })
+    
+    # Kullanıcının satır ekleyip silebildiği sihirli Streamlit tablosu
+    hizli_veri_df = st.sidebar.data_editor(
+        sablon_df, 
+        num_rows="dynamic", # Sınır yok, adam 60 metre de girer!
+        use_container_width=True,
+        hide_index=True
+    )
+    
+    # Sistemi tetikleyecek buton
+    if st.sidebar.button("🚀 Verileri Analiz Et", use_container_width=True):
+        # Girilen dinamik tabloyu arka planda bizim hesap motorunun istediği formata sokuyoruz
+        ham_df = hizli_veri_df.copy()
+        ham_df['Sondaj_No'] = hizli_kuyu_adi
+        ham_df['GYS_m'] = hizli_yass
+        # Tek kuyu olduğu için koordinatları bypass ediyoruz (Motor çökmesin diye)
+        ham_df['X_Koordinat_m'] = 0.0
+        ham_df['Y_Koordinat_m'] = 0.0
+        ham_df['Enlem'] = 0.0 
+        ham_df['Boylam'] = 0.0
 
 st.sidebar.header("2. Deprem ve Zemin")
 afad_dosya = st.sidebar.file_uploader("AFAD Raporu (PDF/TXT)", type=['pdf', 'txt', 'csv'])
