@@ -91,7 +91,7 @@ def csv_oku(dosya):
     return None
 
 if veri_giris_modu == "📁 Çoklu Kuyu (CSV / Excel)":
-    st.info("👈 Sol menüden deprem ayarlarınızı yapın ve aşağıdan CSV dosyanızı yükleyin.")
+    st.info(" Sol menüden deprem ayarlarınızı yapın ve aşağıdan CSV dosyanızı yükleyin.")
     yuklenen_dosya = st.file_uploader("Sondaj Verisi (CSV) Yükle", type=['csv'])
     if yuklenen_dosya is not None:
         ham_df = csv_oku(yuklenen_dosya)
