@@ -6,7 +6,7 @@ from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
 # ==========================================
-# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025 VERSİYONU)
+# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025 - NİHAİ ÇÖZÜM)
 # ==========================================
 def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
     script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu (v2025 Uyumlu)\nKuyu: {kuyu_adi}\n"""\n'
@@ -36,13 +36,13 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
         guvenli_isim = zemin_sinifi.replace("-", "_").replace(" ", "_").replace("/", "_")
         mat_adi = f"Mat_{index+1}_{guvenli_isim}"
         
-        # Sayıları virgülden sonra 2 haneye sabitleyerek tertemiz bir komut yolluyoruz
+        # PLAXIS API TUZAĞI ÇÖZÜLDÜ: Undrained (3) olsa bile parametre adı 'cref' olmak ZORUNDA (Ama phi gönderilmeyecek)
         if drainage == 3:
             script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
             script += f"'SoilModel', 2, 'DrainageType', {drainage}, "
             script += f"'gammaUnsat', {gamma:.2f}, 'gammaSat', {gamma + 1.0:.2f}, "
             script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
-            script += f"'su_ref', {cu:.2f})\n"
+            script += f"'cref', {cu:.2f})\n" # su_ref yerine tekrar cref yapıldı, phi eklenmedi!
         else:
             c_val = cu if cu > 0 else 1.0
             script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
@@ -51,7 +51,6 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
             script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
             script += f"'cref', {c_val:.2f}, 'phi', {phi:.2f})\n"
         
-        # ANAHTAR DEĞİŞİKLİK: PLAXIS 2025 için derinliği doğrudan soillayer komutunun içine koyuyoruz!
         script += f"g_i.soillayer(bh, {-derinlik:.2f})\n"
         script += f"g_i.setmaterial(bh.SoilLayers[{index}], {mat_adi})\n\n"
         
