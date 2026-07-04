@@ -5,6 +5,50 @@ from modules.hesap_motoru import geoteknik_analiz
 from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
+# ==========================================
+# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON
+# ==========================================
+def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
+    script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu\nKuyu: {kuyu_adi}\n"""\n'
+    script += "from plxscripting.easy import *\n"
+    script += "import sys\n\n"
+    script += "localhost_port = 10000\n"
+    script += "password = '12345'\n\n"
+    script += "try:\n"
+    script += "    s, g_i = new_server('localhost', localhost_port, password=password)\n"
+    script += "except Exception as e:\n"
+    script += "    print('Baglanti Hatasi:', e)\n"
+    script += "    sys.exit()\n\n"
+    script += "s.new()\n"
+    script += "bh = g_i.borehole(0.0)\n\n"
+
+    script += "# --- ZEMIN PARAMETRELERI VE TABAKALAR ---\n"
+    
+    for index, row in df.iterrows():
+        derinlik = row['Derinlik_m']
+        zemin_sinifi = row['Zemin_Sinifi']
+        gamma = row['Gamma_Tasarim']
+        cu = row['Cu_Tasarim'] if pd.notna(row['Cu_Tasarim']) else 0.0
+        phi = row['Phi_Acisi'] if pd.notna(row['Phi_Acisi']) else 0.0
+        e_mod = row['E_Modulu']
+        
+        drainage = 3 if cu > 0 else 1
+        mat_adi = f"Mat_{index+1}_{zemin_sinifi}"
+        
+        script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
+        script += f"'SoilModel', 2, 'DrainageType', {drainage}, "
+        script += f"'gammaUnsat', {gamma}, 'gammaSat', {gamma + 1.0}, "
+        script += f"'Eref', {e_mod}, 'nu', 0.35, "
+        script += f"'cref', {cu if cu > 0 else 1.0}, 'phi', {phi})\n"
+        
+        script += f"g_i.soillayer(bh)\n"
+        script += f"g_i.set(bh.SoilLayers[{index}].Bottom, -{derinlik})\n"
+        script += f"g_i.setmaterial(bh.SoilLayers[{index}], {mat_adi})\n\n"
+        
+    script += "print('Lique3D Verileri PLAXIS 2D Ortamina Basariyla Aktarildi!')\n"
+    return script.encode('utf-8')
+
+
 st.set_page_config(page_title="Lique3D Analiz Sistemi", layout="wide")
 st.title("Lique3D: Geoteknik Analiz ve Sismik İyileştirme Sistemi")
 st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ve Statik Tasarım Motoru*")
@@ -55,7 +99,6 @@ if afad_dosya is not None:
 st.sidebar.info(afad_durum)
 
 with st.sidebar.expander("İleri Sismik ve Laboratuvar Ayarları", expanded=False):
-    # Parametreler her halükarda tanımlı olsun diye if dışına aldık
     pga_val = st.number_input("PGA (İvme)", value=afad_verileri[secilen_dd]["PGA"], step=0.001, format="%.3f")
     ss_val = st.number_input("Ss (Kısa Periyot)", value=afad_verileri[secilen_dd]["Ss"], step=0.001, format="%.3f")
     s1_val = st.number_input("S1 (1.0sn Periyot)", value=afad_verileri[secilen_dd]["S1"], step=0.001, format="%.3f")
@@ -91,7 +134,7 @@ def csv_oku(dosya):
     return None
 
 if veri_giris_modu == "📁 Çoklu Kuyu (CSV / Excel)":
-    st.info(" Sol menüden deprem ayarlarınızı yapın ve aşağıdan CSV dosyanızı yükleyin.")
+    st.info("👈 Sol menüden deprem ayarlarınızı yapın ve aşağıdan CSV dosyanızı yükleyin.")
     yuklenen_dosya = st.file_uploader("Sondaj Verisi (CSV) Yükle", type=['csv'])
     if yuklenen_dosya is not None:
         ham_df = csv_oku(yuklenen_dosya)
@@ -132,16 +175,16 @@ try:
     if ham_df is not None and len(ham_df) > 0:
         st.divider()
         
-        # Analiz Modülünü Çağır
         df, kuyu_oturmalari, s = geoteknik_analiz(
             ham_df, pga_val, ss_val, s1_val, mw, ce_val, cb_val, cs_val, 
             vs30_val, cu30_val, ze_ozel_kosul, zf_ozel_kosul, iyilestirme_aktif, 
             tasarim_capi, tasarim_grid, proje_alani, birim_fiyat, kati_filtre_aktif
         )
 
-        tab_deprem, tab_param, tab_3d, tab_2d, tab_vaziyet, tab_ai, tab_rapor = st.tabs([
+        # PLAXIS Sekmesini buraya ekledik
+        tab_deprem, tab_param, tab_3d, tab_2d, tab_vaziyet, tab_ai, tab_rapor, tab_plaxis = st.tabs([
             "Deprem Spektrumu", "Statik Tasarım", "3B Model", "2B Kesit", 
-            "İzohips Planı", "İyileştirme Simulasyonu", "Rapor Çıktısı"
+            "İzohips Planı", "İyileştirme Simulasyonu", "Rapor Çıktısı", "PLAXIS Entegrasyonu"
         ])
 
         with tab_deprem:
@@ -204,9 +247,7 @@ try:
             
             st.divider()
             st.markdown("### 📝 Yönetici Özeti ve Statik Raporu")
-            st.info("Hesaplanan sismik tehlike parametrelerini ve geoteknik tasarım tablolarını Word formatında indirin.")
-            
-            s['PGA'] = pga_val # Rapor motoru için PGA değerini ekledik
+            s['PGA'] = pga_val 
             word_dosyasi = word_raporu_uret(df, s, secilen_dd)
             
             st.download_button(
@@ -214,6 +255,30 @@ try:
                 data=word_dosyasi,
                 file_name=f"Geoteknik_Rapor_{secilen_dd[:4]}.docx",
                 mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+        # YENİ EKLENEN PLAXIS SEKMESİ
+        with tab_plaxis:
+            st.markdown("## 🔵 PLAXIS 2D Otomatik Model Aktarımı")
+            st.info("Bu modül, Lique3D üzerinde analiz ettiğiniz sondaj profilini ve geoteknik parametreleri tek tıkla PLAXIS 2D'ye aktarmanız için bir Python makrosu (.py) üretir.")
+            
+            st.markdown("""
+            **Kullanım Adımları:**
+            1. Aşağıdaki butondan makro dosyasını indirin.
+            2. PLAXIS 2D programını açın ve *Expert -> Configure remote scripting server* kısmından portu **10000**, şifreyi **12345** yapıp başlatın.
+            3. İndirdiğiniz Python dosyasını çalıştırın. Tüm model saniyeler içinde çizilecektir!
+            """)
+            
+            secili_kuyu_plaxis = st.selectbox("Aktarılacak Kuyuyu Seçin:", df['Sondaj_No'].unique())
+            plaxis_icin_df = df[df['Sondaj_No'] == secili_kuyu_plaxis].sort_values('Derinlik_m')
+            
+            plaxis_dosyasi = plaxis_makrosu_uret(plaxis_icin_df, secili_kuyu_plaxis)
+            
+            st.download_button(
+                label="🐍 PLAXIS Makrosunu İndir (.py)",
+                data=plaxis_dosyasi,
+                file_name=f"Lique3D_to_PLAXIS_{secili_kuyu_plaxis}.py",
+                mime="text/x-python"
             )
 
 except Exception as e:
