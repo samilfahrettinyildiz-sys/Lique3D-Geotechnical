@@ -6,7 +6,7 @@ from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
 # ==========================================
-# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (DÜZELTİLMİŞ)
+# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (DÜZELTİLMİŞ v2)
 # ==========================================
 def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
     script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu\nKuyu: {kuyu_adi}\n"""\n'
@@ -33,16 +33,23 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
         e_mod = row['E_Modulu']
         
         drainage = 3 if cu > 0 else 1
-        
-        # Python değişken isminde hata vermemesi için temizlik (Tire, boşluk ve taksimleri alt çizgiye çeviriyoruz)
         guvenli_isim = zemin_sinifi.replace("-", "_").replace(" ", "_").replace("/", "_")
         mat_adi = f"Mat_{index+1}_{guvenli_isim}"
         
-        script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
-        script += f"'SoilModel', 2, 'DrainageType', {drainage}, "
-        script += f"'gammaUnsat', {gamma}, 'gammaSat', {gamma + 1.0}, "
-        script += f"'Eref', {e_mod}, 'nu', 0.35, "
-        script += f"'cref', {cu if cu > 0 else 1.0}, 'phi', {phi})\n"
+        # ANAHTAR DÜZELTME: Drainage = 3 (Undrained B) ise phi GÖNDERİLMEZ!
+        if drainage == 3:
+            script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
+            script += f"'SoilModel', 2, 'DrainageType', {drainage}, "
+            script += f"'gammaUnsat', {gamma}, 'gammaSat', {gamma + 1.0}, "
+            script += f"'Eref', {e_mod}, 'nu', 0.35, "
+            script += f"'su_ref', {cu})\n" # Undrained B modelinde C_u degeri su_ref olarak atanir
+        else:
+            # Drenajlı (Kum/Çakıl) durumda hem c' (cref) hem phi atanır
+            script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
+            script += f"'SoilModel', 2, 'DrainageType', {drainage}, "
+            script += f"'gammaUnsat', {gamma}, 'gammaSat', {gamma + 1.0}, "
+            script += f"'Eref', {e_mod}, 'nu', 0.35, "
+            script += f"'cref', {cu if cu > 0 else 1.0}, 'phi', {phi})\n"
         
         script += f"g_i.soillayer(bh)\n"
         script += f"g_i.set(bh.SoilLayers[{index}].Bottom, -{derinlik})\n"
@@ -267,7 +274,7 @@ try:
             **Kullanım Adımları:**
             1. Aşağıdaki butondan makro dosyasını indirin.
             2. PLAXIS 2D programını açın ve *Expert -> Configure remote scripting server* kısmından portu **10000**, şifreyi **12345** yapıp başlatın.
-            3. İndirdiğiniz Python dosyasını çalıştırın. Tüm model saniyeler içinde çizilecektir!
+            3. PLAXIS içinden *Expert -> Run Python script* diyerek indirdiğiniz bu dosyayı seçin.
             """)
             
             secili_kuyu_plaxis = st.selectbox("Aktarılacak Kuyuyu Seçin:", df['Sondaj_No'].unique())
