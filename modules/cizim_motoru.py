@@ -10,10 +10,6 @@ def ciz_spektrum(T_vals, Sae_vals, TA, TB, etiket):
     fig.update_layout(title=f"Yatay Elastik Tasarim Spektrumu ({etiket})", xaxis_title="Periyot T (sn)", yaxis_title="Spektral Ivme Sae(T) [g]", template="plotly_dark", height=500)
     return fig
 
-import plotly.graph_objects as go
-import numpy as np
-from scipy.interpolate import griddata
-
 def ciz_3d(df, hedef_derinlik):
     fig = go.Figure()
     max_x_raw, max_y_raw = df['X_Koordinat_m'].max(), df['Y_Koordinat_m'].max()
@@ -21,77 +17,54 @@ def ciz_3d(df, hedef_derinlik):
     max_x, max_y = max(max_x_raw, max_extent * 0.4), max(max_y_raw, max_extent * 0.4)
     pad = max(10.0, max_extent * 0.05)
 
-    # Zemin yüzeyini temsil eden taban düzlem (Şeffaf)
+    # Zemin yüzeyini temsil eden taban düzlem
     fig.add_trace(go.Mesh3d(x=[-pad, max_x+pad, max_x+pad, -pad], y=[-pad, -pad, max_y+pad, max_y+pad], z=[0,0,0,0], i=[0,0], j=[1,2], k=[2,3], opacity=0.1, color='white', hoverinfo='none'))
 
-    # ZEMİN RENK KATALOĞU (TBDY-2018 Sınıflarına Göre Kurumsal Renkler)
-    renk_katalogu = {
-        'CH': '#5C4033', 'CL': '#8B4513', # Killer (Koyu ve Açık Kahverengi)
-        'SC': '#B8860B', 'SM': '#DAA520', # Killi/Siltli Kumlar (Hardal/Koyu Sarı)
-        'SP': '#F0E68C', 'SW': '#FFD700', # Temiz Kumlar (Açık Sarı / Altın)
-        'ML': '#D2B48C', 'MH': '#CD853F', # Siltler (Taba rengi)
-        'GW': '#808080', 'GP': '#A9A9A9', 'GC': '#696969', 'GM': '#778899' # Çakıllar (Gri Tonları)
-    }
-
-    # Her benzersiz sondajı tabaka tabaka kalın sütunlar olarak inşa et
+    # Her benzersiz sondajın en üst noktasına kurumsal etiket basılması
     for sondaj in df['Sondaj_No'].unique():
         temp = df[df['Sondaj_No'] == sondaj].sort_values('Derinlik_m')
         
-        x_kord = temp['X_Koordinat_m'].iloc[0]
-        y_kord = temp['Y_Koordinat_m'].iloc[0]
-        
-        # Tam zemin yüzeyi kotu (Z=0) için elit kuyu isim etiketi
+        # Kuyunun çizgisi ve derinlik boyunca katman noktaları
         fig.add_trace(go.Scatter3d(
-            x=[x_kord], y=[y_kord], z=[0.0], mode='text', 
-            text=[f"<b>{sondaj}</b>"], textposition='top center',
-            textfont=dict(family='Helvetica Neue, Helvetica, Arial, sans-serif', size=14, color='#FFFFFF'),
-            showlegend=False, hoverinfo='none'
+            x=temp['X_Koordinat_m'], y=temp['Y_Koordinat_m'], z=-temp['Derinlik_m'], mode='lines+markers',
+            marker=dict(size=6, color=temp['Renk'], line=dict(width=1, color='black')), line=dict(color='rgba(255,255,255,0.4)', width=5),
+            text=[f"Sondaj: {s}<br>Zemin: {z}<br>FS: {f:.2f}<br>Oturma: {o:.2f} cm" for s,z,f,o in zip(temp['Sondaj_No'], temp['Zemin_Sinifi'], temp['FS'], temp['Tabaka_Oturmasi_cm'])], hoverinfo='text', name=sondaj
+        ))
+        
+        # Tam zemin yüzeyi kotu (Z=0) için elit grafik tasarımı
+        en_ust_nokta = temp.iloc[0]
+        fig.add_trace(go.Scatter3d(
+            x=[en_ust_nokta['X_Koordinat_m']], 
+            y=[en_ust_nokta['Y_Koordinat_m']], 
+            z=[0.0], 
+            mode='text', 
+            text=[f"<b>{sondaj}</b>"], 
+            textposition='top center',
+            textfont=dict(
+                family='Helvetica Neue, Helvetica, Arial, sans-serif', 
+                size=12, 
+                color='#E0E0E0' 
+            ),
+            showlegend=False,
+            hoverinfo='none'
         ))
 
-        # YENİ NESİL STRATİGRAFİ ÇİZİMİ
-        ust_kot = 0.0
-        for _, row in temp.iterrows():
-            alt_kot = -row['Derinlik_m']
-            zemin_kodu = str(row['Zemin_Sinifi']).upper()
-            
-            # İçinde geçen koda göre rengi bul, bulamazsa beyaz yap
-            tabaka_rengi = '#FFFFFF'
-            for key, val in renk_katalogu.items():
-                if key in zemin_kodu:
-                    tabaka_rengi = val
-                    break
-            
-            # Kalın çizgi tekniğiyle (width=18) 3B stratigrafi sütunu yaratıyoruz
-            fig.add_trace(go.Scatter3d(
-                x=[x_kord, x_kord], 
-                y=[y_kord, y_kord], 
-                z=[ust_kot, alt_kot], 
-                mode='lines',
-                line=dict(color=tabaka_rengi, width=18), # Kalınlık buradan ayarlanır
-                text=f"<b>Sondaj:</b> {sondaj}<br><b>Zemin:</b> {zemin_kodu}<br><b>Derinlik:</b> {-ust_kot:.1f}m -> {-alt_kot:.1f}m<br><b>FS:</b> {row['FS']:.2f}<br><b>Oturma:</b> {row['Tabaka_Oturmasi_cm']:.2f} cm", 
-                hoverinfo='text', 
-                name=f"{sondaj} - {zemin_kodu}",
-                showlegend=False
-            ))
-            
-            # Bir sonraki tabaka, bu tabakanın bittiği yerden başlayacak
-            ust_kot = alt_kot 
-
-    # SİSMİK RİSK HARİTASI YÜZEYİ (Nearest metodu korundu)
+    # GÜVENLİ LİMANA DÖNÜŞ: Sismik Risk Haritasını solid (katı) yapıyoruz
     dilim_df = df[(df['Derinlik_m'] >= hedef_derinlik - 2.5) & (df['Derinlik_m'] <= hedef_derinlik + 2.5)].dropna(subset=['X_Koordinat_m', 'Y_Koordinat_m', 'FS'])
-    
-    # TEK KUYU KORUMASI: Sadece 3 ve daha fazla kuyu varsa haritayı çiz (Hata vermesini engeller)
     if len(dilim_df['Sondaj_No'].unique()) >= 3: 
         isi_veri = dilim_df.sort_values(by="Derinlik_m", key=lambda x: abs(x - hedef_derinlik)).groupby('Sondaj_No').first().reset_index()
+        # Izgara ağını biraz daha kaba yapıyoruz ki 'nearest' blokları daha hızlı çizilsin
         X_grid, Y_grid = np.meshgrid(np.linspace(-pad, max_x+pad, 30), np.linspace(-pad, max_y+pad, 30))
         
-        # Solid (katı) boyama
+        # METHOD DEĞİŞTİ: Hatalı 'linear' yerine 'nearest' çekildi. Bu sahanın tamamını boyar, asla şeffaf delik bırakmaz.
         grid_z = griddata(isi_veri[['X_Koordinat_m', 'Y_Koordinat_m']].values, isi_veri['FS'].values, (X_grid, Y_grid), method='nearest')
         
-        fig.add_trace(go.Surface(x=X_grid, y=Y_grid, z=np.full(X_grid.shape, -float(hedef_derinlik)), surfacecolor=grid_z, colorscale=[[0, 'red'], [0.25, 'orange'], [0.5, 'green'], [1.0, 'darkgreen']], cmin=0.5, cmax=2.0, opacity=0.6, showscale=True, colorbar=dict(title="FS (Güvenlik)", thickness=20, x=0.0)))
+        # Pürüzsüzleştirme ve maskeleme kodları kaldırıldı, Z koordinatı solid kalıyor.
+        fig.add_trace(go.Surface(x=X_grid, y=Y_grid, z=np.full(X_grid.shape, -float(hedef_derinlik)), surfacecolor=grid_z, colorscale=[[0, 'red'], [0.25, 'orange'], [0.5, 'green'], [1.0, 'darkgreen']], cmin=0.5, cmax=2.0, opacity=0.6, showscale=True))
 
     fig.update_layout(template="plotly_dark", margin=dict(l=0, r=0, b=0, t=0), height=700, scene=dict(aspectmode='manual', aspectratio=dict(x=1, y=1, z=0.5)))
     return fig
+
 def ciz_2d(df, secili_kuyular):
     # 2B Kesit haritası için doğrusal pürüzsüzleştirme uygundur, değiştirilmedi.
     fig = go.Figure()
