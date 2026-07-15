@@ -6,10 +6,10 @@ from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
 # ==========================================
-# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (GERÇEK NİHAİ VERSİYON)
+# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025 - KALINLIK ÇÖZÜMLÜ)
 # ==========================================
 def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
-    script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu (v2025 Kurşun Geçirmez)\nKuyu: {kuyu_adi}\n"""\n'
+    script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu (v2025)\nKuyu: {kuyu_adi}\n"""\n'
     script += "from plxscripting.easy import *\n"
     script += "import sys\n\n"
     script += "localhost_port = 10000\n"
@@ -24,8 +24,12 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
 
     script += "# --- ZEMIN PARAMETRELERI VE TABAKALAR ---\n"
     
+    onceki_derinlik = 0.0 # Kalınlık hesabı için başlangıç noktası
+    
     for index, row in df.iterrows():
         derinlik = float(row['Derinlik_m'])
+        kalinlik = derinlik - onceki_derinlik # Tabaka kalınlığını buluyoruz
+        
         zemin_sinifi = str(row['Zemin_Sinifi'])
         gamma = float(row['Gamma_Tasarim'])
         cu = float(row['Cu_Tasarim']) if pd.notna(row['Cu_Tasarim']) else 0.0
@@ -41,7 +45,7 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
             script += f"'SoilModel', 'Mohr-Coulomb', 'DrainageType', 'Undrained (B)', "
             script += f"'gammaUnsat', {gamma:.2f}, 'gammaSat', {gamma + 1.0:.2f}, "
             script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
-            script += f"'cref', {cu:.2f})\n"  # İŞTE BURASI DÜZELDİ! su_ref yerine cref kullanıldı.
+            script += f"'cref', {cu:.2f})\n"
         else:
             # Kohezyonsuz zemin -> Drained
             c_val = cu if cu > 0 else 1.0
@@ -51,8 +55,11 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
             script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
             script += f"'cref', {c_val:.2f}, 'phi', {phi:.2f})\n"
         
-        script += f"g_i.soillayer(bh, {-derinlik:.2f})\n"
+        # PLAXIS 2025'e negatif kot yerine pozitif kalınlık veriyoruz
+        script += f"g_i.soillayer(bh, {kalinlik:.2f})\n"
         script += f"g_i.setmaterial(bh.SoilLayers[{index}], {mat_adi})\n\n"
+        
+        onceki_derinlik = derinlik # Bir sonraki adım için derinliği güncelliyoruz
         
     script += "print('Lique3D Verileri PLAXIS 2D 2025 Ortamina Basariyla Aktarildi!')\n"
     return script.encode('utf-8')
