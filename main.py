@@ -6,7 +6,7 @@ from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
 # ==========================================
-# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025 - TAM ÇÖZÜM)
+# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025 - NESNE YAKALAMA ÇÖZÜMÜ)
 # ==========================================
 def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
     script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu (v2025)\nKuyu: {kuyu_adi}\n"""\n'
@@ -53,9 +53,10 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
             script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
             script += f"'cref', {c_val:.2f}, 'phi', {phi:.2f})\n"
         
-        script += f"g_i.soillayer(bh, {kalinlik:.2f})\n"
-        # Orijinal, taş gibi çalışan atama komutuna geri dönüldü!
-        script += f"g_i.setmaterial(bh.SoilLayers[{index}], {mat_adi})\n\n"
+        # İŞTE BÜYÜ BURADA: Tabakayı oluşturduğu an havada kapıp 'yeni_tabaka' değişkenine atıyoruz
+        script += f"yeni_tabaka_{index} = g_i.soillayer(bh, {kalinlik:.2f})\n"
+        # Ve malzemeyi doğrudan o yakaladığımız taze tabakaya yapıştırıyoruz!
+        script += f"g_i.setmaterial(yeni_tabaka_{index}, {mat_adi})\n\n"
         
         onceki_derinlik = derinlik 
         
