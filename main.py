@@ -6,7 +6,7 @@ from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
 # ==========================================
-# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025 BULLETPROOF VERSİYON)
+# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (GERÇEK NİHAİ VERSİYON)
 # ==========================================
 def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
     script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu (v2025 Kurşun Geçirmez)\nKuyu: {kuyu_adi}\n"""\n'
@@ -35,14 +35,13 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
         guvenli_isim = zemin_sinifi.replace("-", "_").replace(" ", "_").replace("/", "_")
         mat_adi = f"Mat_{index+1}_{guvenli_isim}"
         
-        # RAKAM TUZAĞI İPTAL: Artık doğrudan String isimler (Metin) kullanıyoruz!
         if cu > 0:
             # Kohezyonlu zemin -> Undrained (B)
             script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
             script += f"'SoilModel', 'Mohr-Coulomb', 'DrainageType', 'Undrained (B)', "
             script += f"'gammaUnsat', {gamma:.2f}, 'gammaSat', {gamma + 1.0:.2f}, "
             script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
-            script += f"'su_ref', {cu:.2f})\n"
+            script += f"'cref', {cu:.2f})\n"  # İŞTE BURASI DÜZELDİ! su_ref yerine cref kullanıldı.
         else:
             # Kohezyonsuz zemin -> Drained
             c_val = cu if cu > 0 else 1.0
