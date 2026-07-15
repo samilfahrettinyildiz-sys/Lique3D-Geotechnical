@@ -53,10 +53,9 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
             script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
             script += f"'cref', {c_val:.2f}, 'phi', {phi:.2f})\n"
         
-        # PLAXIS 2025 için DOĞRU atama komutları:
         script += f"g_i.soillayer(bh, {kalinlik:.2f})\n"
-        # Çökmeye sebep olan eski setmaterial yerine yeni resmi komut eklendi!
-        script += f"g_i.set(bh.SoilLayers[{index}].Material, {mat_adi})\n\n"
+        # Orijinal, taş gibi çalışan atama komutuna geri dönüldü!
+        script += f"g_i.setmaterial(bh.SoilLayers[{index}], {mat_adi})\n\n"
         
         onceki_derinlik = derinlik 
         
