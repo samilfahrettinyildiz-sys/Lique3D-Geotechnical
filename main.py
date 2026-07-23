@@ -6,10 +6,10 @@ from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
 # ==========================================
-# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025 - NİHAİ MİMARİ)
+# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025.1 API - REFERANS YAKALAMA ÇÖZÜMÜ)
 # ==========================================
 def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
-    script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu (v2025)\nKuyu: {kuyu_adi}\n"""\n'
+    script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu (v2025.1 Uyumlu)\nKuyu: {kuyu_adi}\n"""\n'
     script += "from plxscripting.easy import *\n"
     script += "import sys\n\n"
     script += "localhost_port = 10000\n"
@@ -53,11 +53,13 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
             script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
             script += f"'cref', {c_val:.2f}, 'phi', {phi:.2f})\n"
         
-        script += f"g_i.soillayer(bh, {kalinlik:.2f})\n"
-        
-        # BÜYÜK DÜZELTME: API'nin yanlış obje döndürme tuzağını aşıp, 
-        # doğrudan PLAXIS'in resmi tabaka ismine (Soillayer_1, Soillayer_2...) boyayı sürüyoruz!
-        script += f"g_i.setmaterial(g_i.Soillayer_{index+1}, {mat_adi})\n\n"
+        # ---------------------------------------------------------
+        # KESİN ÇÖZÜM: PLAXIS 2025.1 API STANDARTLARINA GÖRE İŞLEM
+        # Obje ismini tahmin etmiyoruz, poligonlara boya atmıyoruz.
+        # soillayer komutunun ürettiği REFERANSI yakalayıp değişkene atıyoruz.
+        # ---------------------------------------------------------
+        script += f"aktif_tabaka_{index} = g_i.soillayer(bh, {kalinlik:.2f})\n"
+        script += f"g_i.setmaterial(aktif_tabaka_{index}, {mat_adi})\n\n"
         
         onceki_derinlik = derinlik 
         
