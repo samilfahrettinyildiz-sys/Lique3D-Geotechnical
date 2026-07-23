@@ -6,7 +6,7 @@ from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
 # ==========================================
-# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025.1 API - REFERANS YAKALAMA ÇÖZÜMÜ)
+# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025.1 API - KESİN ÇÖZÜM)
 # ==========================================
 def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
     script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu (v2025.1 Uyumlu)\nKuyu: {kuyu_adi}\n"""\n'
@@ -54,12 +54,11 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
             script += f"'cref', {c_val:.2f}, 'phi', {phi:.2f})\n"
         
         # ---------------------------------------------------------
-        # KESİN ÇÖZÜM: PLAXIS 2025.1 API STANDARTLARINA GÖRE İŞLEM
-        # Obje ismini tahmin etmiyoruz, poligonlara boya atmıyoruz.
-        # soillayer komutunun ürettiği REFERANSI yakalayıp değişkene atıyoruz.
-        # ---------------------------------------------------------
+        # KESİN ÇÖZÜM: Zemin tabakası (Soillayer) oluşturuluyor.
         script += f"aktif_tabaka_{index} = g_i.soillayer(bh, {kalinlik:.2f})\n"
-        script += f"g_i.setmaterial(aktif_tabaka_{index}, {mat_adi})\n\n"
+        # setmaterial KULLANILMIYOR! Doğrudan Material özelliğine (attribute) atama yapılıyor.
+        script += f"aktif_tabaka_{index}.Material = {mat_adi}\n\n"
+        # ---------------------------------------------------------
         
         onceki_derinlik = derinlik 
         
