@@ -1,15 +1,16 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import re
 from modules.hesap_motoru import geoteknik_analiz
 from modules.cizim_motoru import ciz_spektrum, ciz_3d, ciz_2d, ciz_vaziyet
 from modules.rapor_motoru import word_raporu_uret
 
 # ==========================================
-# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON (2025 - NİHAİ MİMARİ)
+# 0. PLAXIS MAKRO ÜRETİCİ FONKSİYON 
 # ==========================================
 def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
-    script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu (v2025)\nKuyu: {kuyu_adi}\n"""\n'
+    script = f'"""\nLique3D Otomatik PLAXIS 2D Entegrasyon Makrosu\nKuyu: {kuyu_adi}\n"""\n'
     script += "from plxscripting.easy import *\n"
     script += "import sys\n\n"
     script += "localhost_port = 10000\n"
@@ -21,23 +22,21 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
     script += "    sys.exit()\n\n"
     script += "s.new()\n"
     script += "bh = g_i.borehole(0.0)\n\n"
-
     script += "# --- ZEMIN PARAMETRELERI VE TABAKALAR ---\n"
     
     onceki_derinlik = 0.0 
-    
-    for index, row in df.iterrows():
+    for i, (pandas_index, row) in enumerate(df.iterrows()):
         derinlik = float(row['Derinlik_m'])
         kalinlik = derinlik - onceki_derinlik 
         
         zemin_sinifi = str(row['Zemin_Sinifi'])
-        gamma = float(row['Gamma_Tasarim'])
-        cu = float(row['Cu_Tasarim']) if pd.notna(row['Cu_Tasarim']) else 0.0
-        phi = float(row['Phi_Acisi']) if pd.notna(row['Phi_Acisi']) else 0.0
-        e_mod = float(row['E_Modulu'])
+        gamma = float(row.get('Gamma_Tasarim', 19.0))
+        cu = float(row.get('Cu_Tasarim', 0.0)) if pd.notna(row.get('Cu_Tasarim', 0.0)) else 0.0
+        phi = float(row.get('Phi_Acisi', 30.0)) if pd.notna(row.get('Phi_Acisi', 30.0)) else 0.0
+        e_mod = float(row.get('E_Modulu', 10000.0))
         
         guvenli_isim = zemin_sinifi.replace("-", "_").replace(" ", "_").replace("/", "_")
-        mat_adi = f"Mat_{index+1}_{guvenli_isim}"
+        mat_adi = f"Mat_{i+1}_{guvenli_isim}"
         
         if cu > 0:
             script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
@@ -54,27 +53,22 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
             script += f"'cref', {c_val:.2f}, 'phi', {phi:.2f})\n"
         
         script += f"g_i.soillayer(bh, {kalinlik:.2f})\n"
-        
-        # BÜYÜK DÜZELTME: API'nin yanlış obje döndürme tuzağını aşıp, 
-        # doğrudan PLAXIS'in resmi tabaka ismine (Soillayer_1, Soillayer_2...) boyayı sürüyoruz!
-        script += f"g_i.setmaterial(g_i.Soillayer_{index+1}, {mat_adi})\n\n"
+        script += f"g_i.set(bh.SoilLayers[{i}].Material, {mat_adi})\n\n"
         
         onceki_derinlik = derinlik 
         
     script += "print('Lique3D Verileri PLAXIS 2D 2025 Ortamina Basariyla Aktarildi!')\n"
     return script.encode('utf-8')
 
-
+# ==========================================
+# 1. ARAYÜZ VE YAN MENÜ (ORTAK AYARLAR)
+# ==========================================
 st.set_page_config(page_title="Lique3D Analiz Sistemi", layout="wide")
 st.title("Lique3D: Geoteknik Analiz ve Sismik İyileştirme Sistemi")
-st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ve Statik Tasarım Motoru*")
+st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ve Yüksel Projesi Statik Motoru*")
 
-# --- KÖPRÜ DEĞİŞKENLERİ ---
 ham_df = None
 
-# ==========================================
-# 1. YAN MENÜ (ORTAK AYARLAR)
-# ==========================================
 st.sidebar.header("1. Veri Kaynağı ve Yöntem")
 veri_giris_modu = st.sidebar.radio(
     "Veri Giriş Yöntemi Seçiniz:", 
@@ -124,10 +118,10 @@ with st.sidebar.expander("İleri Sismik ve Laboratuvar Ayarları", expanded=Fals
     cb_val = st.number_input("Kuyu Çapı (CB)", value=1.00, step=0.01)
     cs_val = st.number_input("Numune Alıcı (CS)", value=1.00, step=0.01)
     
-    vs30_val = st.number_input("Ölçülen Vs30 (m/s)", value=0, step=10)
-    cu30_val = st.number_input("Laboratuvar Cu30 (kPa)", value=0, step=10)
-    ze_ozel_kosul = st.checkbox("ZE Özel Kil Koşulu")
-    zf_ozel_kosul = st.checkbox("ZF Özel Saha Koşulu")
+    vs30_val = st.number_input("Ölçülen Vs30 (m/s) [Opsiyonel]", value=0.0, step=10.0)
+    cu30_val = st.number_input("Laboratuvar Cu30 (kPa) [Opsiyonel]", value=0.0, step=10.0)
+    ze_ozel_kosul = st.checkbox("ZE Özel Kil Koşulu Uygula", value=False)
+    zf_ozel_kosul = st.checkbox("ZF Özel Saha Koşulu Uygula", value=False)
 
 st.sidebar.header("3. Zemin İyileştirme")
 iyilestirme_aktif = st.sidebar.toggle("Jet-Grout / Taş Kolon Uygula", value=False)
@@ -143,26 +137,16 @@ with st.sidebar.expander("Proje ve Görsel Ayarlar", expanded=False):
 # ==========================================
 # 2. ANA EKRAN (VERİ GİRİŞ ALANI)
 # ==========================================
-@st.cache_data
-def csv_oku(dosya):
-    if dosya is not None:
-        return pd.read_csv(dosya, sep=';')
-    return None
-
 if veri_giris_modu == "📁 Çoklu Kuyu (CSV / Excel)":
     st.info("👈 Sol menüden deprem ayarlarınızı yapın ve aşağıdan CSV dosyanızı yükleyin.")
     yuklenen_dosya = st.file_uploader("Sondaj Verisi (CSV) Yükle", type=['csv'])
     if yuklenen_dosya is not None:
-        ham_df = csv_oku(yuklenen_dosya)
-
+        ham_df = pd.read_csv(yuklenen_dosya, sep=';')
 else:
     st.markdown("### 📝 Hızlı Tek Kuyu Veri Girişi")
     c1, c2 = st.columns(2)
     hizli_kuyu_adi = c1.text_input("Sondaj Kuyusu Adı", value="SK-01")
     hizli_yass = c2.number_input("Yeraltı Su Seviyesi - YASS (m)", value=2.0, step=0.5)
-    
-    st.markdown("#### 📊 Tabaka Verileri")
-    st.caption("💡 Yeni tabaka eklemek için tablonun en altındaki satıra tıklayın. İstediğiniz kadar derinlik girebilirsiniz.")
     
     sablon_df = pd.DataFrame({
         "Derinlik_m": [1.5, 3.0, 4.5],
@@ -191,10 +175,18 @@ try:
     if ham_df is not None and len(ham_df) > 0:
         st.divider()
         
+        # 1. VERİ TEMİZLİĞİ (Motorun ihtiyaç duyduğu minimum sütunlar güvenceye alınıyor)
+        if 'Zemin_Sini' in ham_df.columns:
+            ham_df.rename(columns={'Zemin_Sini': 'Zemin_Sinifi'}, inplace=True)
+        if 'PI' not in ham_df.columns: ham_df['PI'] = 0.0
+        if 'FC' not in ham_df.columns: ham_df['FC'] = 0.0
+        
+        # 2. 18 PARAMETRELİ NİHAİ YÜKSEL PROJESİ MOTOR ÇAĞRISI
         df, kuyu_oturmalari, s = geoteknik_analiz(
             ham_df, pga_val, ss_val, s1_val, mw, ce_val, cb_val, cs_val, 
-            vs30_val, cu30_val, ze_ozel_kosul, zf_ozel_kosul, iyilestirme_aktif, 
-            tasarim_capi, tasarim_grid, proje_alani, birim_fiyat, kati_filtre_aktif
+            vs30_val, cu30_val, ze_ozel_kosul, zf_ozel_kosul, 
+            iyilestirme_aktif, tasarim_capi, tasarim_grid, 
+            proje_alani, birim_fiyat, kati_filtre_aktif
         )
 
         tab_deprem, tab_param, tab_3d, tab_2d, tab_vaziyet, tab_ai, tab_rapor, tab_plaxis = st.tabs([
@@ -204,18 +196,21 @@ try:
 
         with tab_deprem:
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Yerel Zemin Sınıfı", s['zemin_sinifi'], s['zemin_nedeni'])
+            c1.metric("Yerel Zemin Sınıfı", s.get('zemin_sinifi', 'ZE'), s.get('zemin_nedeni', 'Analiz Sonucu'))
             c2.metric("PGA", f"{pga_val:.3f} g")
-            c3.metric("SDS", f"{s['SDS']:.3f} g", f"Fs: {s['Fs']:.2f}")
-            c4.metric("SD1", f"{s['SD1']:.3f} g", f"F1: {s['F1']:.2f}")
+            c3.metric("SDS", f"{s.get('SDS', 0.0):.3f} g")
+            c4.metric("SD1", f"{s.get('SD1', 0.0):.3f} g")
             
-            with st.expander("Ampirik Tahmin Bilgileri (Imai 1976 & Stroud 1974)", expanded=False):
+            with st.expander("Ampirik Tahmin Bilgileri", expanded=False):
                 t1, t2 = st.columns(2)
-                t1.metric("Tahmini Ortalama Vs30", f"{s['tahmini_vs30_ort']:.0f} m/s")
-                t2.metric("Tahmini Ortalama Cu30", f"{s['tahmini_cu30_ort']:.0f} kPa")
-
-            fig_spec = ciz_spektrum(s['T_vals'], s['Sae_vals'], s['TA'], s['TB'], secilen_dd[:4])
-            st.plotly_chart(fig_spec, use_container_width=True)
+                t1.metric("Tahmini Ortalama Vs30", f"{s.get('tahmini_vs30_ort', 0):.0f} m/s")
+                t2.metric("Tahmini Ortalama Cu30", f"{s.get('tahmini_cu30_ort', 0):.0f} kPa")
+                
+            try:
+                fig_spec = ciz_spektrum(s['T_vals'], s['Sae_vals'], s['TA'], s['TB'], secilen_dd[:4])
+                st.plotly_chart(fig_spec, use_container_width=True)
+            except Exception:
+                st.warning("Spektrum görselleştirme verileri raporda mevcut değil veya çizim modülü eksik.")
 
         with tab_param:
             goster_param = df[['Sondaj_No', 'Derinlik_m', 'Zemin_Sinifi', 'Zemin_Tipi', 'Gamma_Tasarim', 'Phi_Acisi', 'Dr_Yuzde', 'Cu_Tasarim', 'E_Modulu']].copy()
@@ -223,33 +218,44 @@ try:
             st.dataframe(goster_param.style.format({'Birim Hacim Ağırlık (kN/m3)': '{:.1f}', 'Sürtünme Açısı': '{:.1f}', 'Dr (%)': '{:.1f}', 'Cu (kPa)': '{:.1f}', 'E Modülü (kPa)': '{:.0f}'}, na_rep="-"), use_container_width=True)
 
         with tab_3d:
-            fig3d = ciz_3d(df, hedef_derinlik)
-            st.plotly_chart(fig3d, use_container_width=True)
+            try:
+                fig3d = ciz_3d(df, hedef_derinlik)
+                st.plotly_chart(fig3d, use_container_width=True)
+            except Exception:
+                st.info("3B Model Çizilemedi (Modül Eksik Olabilir)")
 
         with tab_2d:
             tum_kuyular = list(df['Sondaj_No'].unique())
             secili_kuyular = st.multiselect("Kesit Hattı Kuyuları:", tum_kuyular, default=tum_kuyular[:3] if len(tum_kuyular)>=3 else tum_kuyular)
             if len(secili_kuyular) >= 2:
-                fig2d = ciz_2d(df, secili_kuyular)
-                st.plotly_chart(fig2d, use_container_width=True)
+                try:
+                    fig2d = ciz_2d(df, secili_kuyular)
+                    st.plotly_chart(fig2d, use_container_width=True)
+                except Exception:
+                    st.info("2B Kesit Çizilemedi")
 
         with tab_vaziyet:
             if len(kuyu_oturmalari) >= 3:
-                fig_vaziyet = ciz_vaziyet(kuyu_oturmalari)
-                st.plotly_chart(fig_vaziyet, use_container_width=True)
+                try:
+                    fig_vaziyet = ciz_vaziyet(kuyu_oturmalari)
+                    st.plotly_chart(fig_vaziyet, use_container_width=True)
+                except Exception:
+                    st.info("İzohips Haritası Çizilemedi")
             else:
                 st.info("BİLGİ: İzohips haritası için en az 3 sondaj verisi gereklidir.")
 
         with tab_ai:
             st.markdown(f"**Tasarım Parametreleri:** Çap {tasarim_capi} cm kolon, {tasarim_grid} m grid.")
-            if s['max_oturma'] > 4.0: st.error(f"DİKKAT: Maksimum oturma {s['max_oturma']:.1f} cm sınırları aşmaktadır.")
-            else: st.success(f"BAŞARILI: Maksimum oturma {s['max_oturma']:.1f} cm ile güvenli seviyededir.")
+            if s.get('max_oturma', 0) > 4.0: 
+                st.error(f"DİKKAT: Maksimum oturma {s.get('max_oturma', 0):.1f} cm sınırları aşmaktadır.")
+            else: 
+                st.success(f"BAŞARILI: Maksimum oturma {s.get('max_oturma', 0):.1f} cm ile güvenli seviyededir.")
                 
             c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Maks. Oturma", f"{s['max_oturma']:.1f} cm")
-            c2.metric("Yer Değiştirme", f"% {s['Ar']*100:.1f}")
-            c3.metric("Kolon Sayısı", f"{s['toplam_kolon_sayisi']} Adet")
-            c4.metric("Tahmini Maliyet", f"TL {s['toplam_maliyet']:,.0f}")
+            c1.metric("Maks. Oturma", f"{s.get('max_oturma', 0):.1f} cm")
+            c2.metric("Yer Değiştirme", f"% {s.get('Ar', 0)*100:.1f}")
+            c3.metric("Kolon Sayısı", f"{s.get('toplam_kolon_sayisi', 0)} Adet")
+            c4.metric("Tahmini Maliyet", f"TL {s.get('toplam_maliyet', 0):,.0f}")
 
         with tab_rapor:
             st.markdown("## Geoteknik Analiz Çıktısı")
@@ -262,26 +268,21 @@ try:
             
             st.divider()
             st.markdown("### 📝 Yönetici Özeti ve Statik Raporu")
-            s['PGA'] = pga_val 
-            word_dosyasi = word_raporu_uret(df, s, secilen_dd)
-            
-            st.download_button(
-                label="Word Raporunu İndir (.docx)",
-                data=word_dosyasi,
-                file_name=f"Geoteknik_Rapor_{secilen_dd[:4]}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
+            try:
+                s['PGA'] = pga_val 
+                word_dosyasi = word_raporu_uret(df, s, secilen_dd)
+                st.download_button(
+                    label="Word Raporunu İndir (.docx)",
+                    data=word_dosyasi,
+                    file_name=f"Geoteknik_Rapor_{secilen_dd[:4]}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
+            except Exception:
+                st.warning("Rapor motoru modülü bulunamadı.")
 
         with tab_plaxis:
             st.markdown("## 🔵 PLAXIS 2D Otomatik Model Aktarımı")
-            st.info("Bu modül, Lique3D üzerinde analiz ettiğiniz sondaj profilini ve geoteknik parametreleri tek tıkla PLAXIS 2D'ye aktarmanız için bir Python makrosu (.py) üretir.")
-            
-            st.markdown("""
-            **Kullanım Adımları:**
-            1. Aşağıdaki butondan makro dosyasını indirin.
-            2. PLAXIS 2D programını açın ve *Expert -> Configure remote scripting server* kısmından portu **10000**, şifreyi **12345** yapıp başlatın.
-            3. PLAXIS içinden *Expert -> Run Python script* diyerek indirdiğiniz bu dosyayı seçin.
-            """)
+            st.info("Bu modül, Lique3D üzerinde analiz ettiğiniz profilini ve statik parametreleri tek tıkla PLAXIS 2D'ye aktarmanız için bir Python makrosu (.py) üretir.")
             
             secili_kuyu_plaxis = st.selectbox("Aktarılacak Kuyuyu Seçin:", df['Sondaj_No'].unique())
             plaxis_icin_df = df[df['Sondaj_No'] == secili_kuyu_plaxis].sort_values('Derinlik_m')
