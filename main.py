@@ -192,8 +192,7 @@ try:
         st.divider()
         
         df, kuyu_oturmalari, s = geoteknik_analiz(
-            ham_df, pga_val, ss_val, s1_val, mw, ce_val, cb_val, cs_val, 
-            vs30_val, cu30_val, ze_ozel_kosul, zf_ozel_kosul, iyilestirme_aktif, 
+            ham_df, ss_val, mw, ce_val, cb_val, cs_val, iyilestirme_aktif, 
             tasarim_capi, tasarim_grid, proje_alani, birim_fiyat, kati_filtre_aktif
         )
 
