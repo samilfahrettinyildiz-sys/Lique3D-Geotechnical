@@ -65,7 +65,7 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
 # ==========================================
 st.set_page_config(page_title="Lique3D Analiz Sistemi", layout="wide")
 st.title("Lique3D: Geoteknik Analiz ve Sismik İyileştirme Sistemi")
-st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ve Yüksel Projesi Statik Motoru*")
+st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ")
 
 ham_df = None
 
