@@ -61,22 +61,60 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
     return script.encode('utf-8')
 
 # ==========================================
-# 1. ARAYÜZ VE YAN MENÜ (ORTAK AYARLAR)
+# 1. ARAYÜZ, TEMA VE YAN MENÜ (ORTAK AYARLAR)
 # ==========================================
-st.set_page_config(page_title="Lique3D Analiz Sistemi", layout="wide")
-st.title("Lique3D: Geoteknik Analiz ve Sismik İyileştirme Sistemi")
-st.markdown("*Kurumsal Geoteknik Karar Destek, AFAD Entegrasyonu ")
+st.set_page_config(page_title="Lique3D Analiz Sistemi", page_icon="🌍", layout="wide", initial_sidebar_state="expanded")
+
+# --- JANJANLI VİTRİN CSS KODLARI ---
+st.markdown("""
+    <style>
+    /* Ana Ekran Başlıkları */
+    .hero-title {
+        font-size: 3.5rem !important;
+        font-weight: 800;
+        color: #4A90E2; 
+        margin-bottom: 0rem;
+        padding-bottom: 0rem;
+    }
+    .hero-subtitle {
+        font-size: 1.2rem;
+        color: #A0A0B0;
+        margin-bottom: 2rem;
+        font-family: 'Courier New', Courier, monospace;
+    }
+    /* Sol Menü Ağaç (Tree) Yapısı Başlıkları */
+    .tree-header {
+        color: #FFFFFF;
+        font-family: 'Courier New', Courier, monospace;
+        font-size: 15px;
+        font-weight: bold;
+        margin-top: 15px;
+        margin-bottom: 10px;
+        border-bottom: 1px solid #2D2D3F;
+        padding-bottom: 5px;
+    }
+    .tree-icon {
+        color: #4A90E2;
+        margin-right: 5px;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# --- ANA EKRAN BAŞLIĞI (Standart st.title yerine havalı hero section) ---
+st.markdown('<p class="hero-title">Lique3D</p>', unsafe_allow_html=True)
+st.markdown('<p class="hero-subtitle">├── Geoteknik Analiz ve Sismik İyileştirme Sistemi<br>└── Kurumsal Karar Destek & AFAD Entegrasyonu</p>', unsafe_allow_html=True)
 
 ham_df = None
 
-st.sidebar.header("1. Veri Kaynağı ve Yöntem")
+# --- SOL MENÜ (AĞAÇ GÖRÜNÜMÜNE UYARLANDI) ---
+st.sidebar.markdown('<div class="tree-header"><span class="tree-icon">📁</span> 1. PROJE VE VERİ GİRİŞİ</div>', unsafe_allow_html=True)
 veri_giris_modu = st.sidebar.radio(
     "Veri Giriş Yöntemi Seçiniz:", 
-    ["📁 Çoklu Kuyu (CSV / Excel)", "📝 Hızlı Tek Kuyu (Manuel)"],
+    ["├── Çoklu Kuyu (CSV / Excel)", "└── Hızlı Tek Kuyu (Manuel)"],
     index=0
 )
 
-st.sidebar.header("2. Deprem ve Zemin (AFAD)")
+st.sidebar.markdown('<div class="tree-header"><span class="tree-icon">📊</span> 2. DEPREM VE ZEMİN (AFAD)</div>', unsafe_allow_html=True)
 afad_dosya = st.sidebar.file_uploader("AFAD Raporu (PDF/TXT)", type=['pdf', 'txt', 'csv'])
 
 afad_verileri = {
@@ -123,7 +161,7 @@ with st.sidebar.expander("İleri Sismik ve Laboratuvar Ayarları", expanded=Fals
     ze_ozel_kosul = st.checkbox("ZE Özel Kil Koşulu Uygula", value=False)
     zf_ozel_kosul = st.checkbox("ZF Özel Saha Koşulu Uygula", value=False)
 
-st.sidebar.header("3. Zemin İyileştirme")
+st.sidebar.markdown('<div class="tree-header"><span class="tree-icon">🏗️</span> 3. ZEMİN İYİLEŞTİRME</div>', unsafe_allow_html=True)
 iyilestirme_aktif = st.sidebar.toggle("Jet-Grout / Taş Kolon Uygula", value=False)
 tasarim_capi = st.sidebar.selectbox("Kolon Çapı (cm)", [60, 80, 100, 120], index=1)
 tasarim_grid = st.sidebar.slider("Grid Aralığı (m)", 0.5, 4.0, 1.5, 0.1)
@@ -137,7 +175,7 @@ with st.sidebar.expander("Proje ve Görsel Ayarlar", expanded=False):
 # ==========================================
 # 2. ANA EKRAN (VERİ GİRİŞ ALANI)
 # ==========================================
-if veri_giris_modu == "📁 Çoklu Kuyu (CSV / Excel)":
+if "Çoklu Kuyu" in veri_giris_modu:
     st.info("👈 Sol menüden deprem ayarlarınızı yapın ve aşağıdan CSV dosyanızı yükleyin.")
     yuklenen_dosya = st.file_uploader("Sondaj Verisi (CSV) Yükle", type=['csv'])
     if yuklenen_dosya is not None:
@@ -175,13 +213,13 @@ try:
     if ham_df is not None and len(ham_df) > 0:
         st.divider()
         
-        # 1. VERİ TEMİZLİĞİ (Motorun ihtiyaç duyduğu minimum sütunlar güvenceye alınıyor)
+        # 1. VERİ TEMİZLİĞİ 
         if 'Zemin_Sini' in ham_df.columns:
             ham_df.rename(columns={'Zemin_Sini': 'Zemin_Sinifi'}, inplace=True)
         if 'PI' not in ham_df.columns: ham_df['PI'] = 0.0
         if 'FC' not in ham_df.columns: ham_df['FC'] = 0.0
         
-        # 2. 18 PARAMETRELİ NİHAİ YÜKSEL PROJESİ MOTOR ÇAĞRISI
+        # 2. MOTOR ÇAĞRISI
         df, kuyu_oturmalari, s = geoteknik_analiz(
             ham_df, pga_val, ss_val, s1_val, mw, ce_val, cb_val, cs_val, 
             vs30_val, cu30_val, ze_ozel_kosul, zf_ozel_kosul, 
@@ -190,8 +228,8 @@ try:
         )
 
         tab_deprem, tab_param, tab_3d, tab_2d, tab_vaziyet, tab_ai, tab_rapor, tab_plaxis = st.tabs([
-            "Deprem Spektrumu", "Statik Tasarım", "3B Model", "2B Kesit", 
-            "İzohips Planı", "İyileştirme Simulasyonu", "Rapor Çıktısı", "PLAXIS Entegrasyonu"
+            "🌊 Deprem Spektrumu", "📋 Statik Tasarım", "🌐 3B Model", "📉 2B Kesit", 
+            "🗺️ İzohips Planı", "🏗️ İyileştirme Simulasyonu", "📄 Rapor Çıktısı", "🔵 PLAXIS Entegrasyonu"
         ])
 
         with tab_deprem:
