@@ -149,17 +149,24 @@ elif st.session_state.aktif_adim == 2:
             st.rerun()
 
 # ----------------- ADIM 3: ANALİZ VE 3B MODELLEME -----------------
+# ----------------- ADIM 3: ANALİZ VE 3B MODELLEME -----------------
 elif st.session_state.aktif_adim == 3:
     st.title("Adım 3: Geoteknik Analiz ve 3B Modelleme 📊")
     
-    # Arka planda motoru çalıştırıyoruz (İyileştirme kapalı)
-    with st.spinner("Lique3D Matrisleri Çözülüyor..."):
-        df, kuyu_oturmalari, s = geoteknik_analiz(
-            st.session_state.ham_df, st.session_state.sismik['pga'], st.session_state.sismik['ss'], 
-            st.session_state.sismik['s1'], st.session_state.sismik['mw'], 0.83, 1.0, 1.0, 0.0, 0.0, 
-            False, False, False, 80, 1.5, 3000, 850, True
-        )
-        st.session_state.analiz_sonuclari = {'df': df, 'kuyu_oturmalari': kuyu_oturmalari, 's': s}
+    # PERFORMANS AYARI: Analizi sadece ilk girişte yap, slider değişince baştan hesaplama!
+    if st.session_state.analiz_sonuclari is None:
+        with st.spinner("Lique3D Matrisleri Çözülüyor... (Lütfen Bekleyin)"):
+            df, kuyu_oturmalari, s = geoteknik_analiz(
+                st.session_state.ham_df, st.session_state.sismik['pga'], st.session_state.sismik['ss'], 
+                st.session_state.sismik['s1'], st.session_state.sismik['mw'], 0.83, 1.0, 1.0, 0.0, 0.0, 
+                False, False, False, 80, 1.5, 3000, 850, True
+            )
+            st.session_state.analiz_sonuclari = {'df': df, 'kuyu_oturmalari': kuyu_oturmalari, 's': s}
+    
+    # Hesaplanan sonuçları hafızadan çek
+    df = st.session_state.analiz_sonuclari['df']
+    s = st.session_state.analiz_sonuclari['s']
+    kuyu_oturmalari = st.session_state.analiz_sonuclari['kuyu_oturmalari']
     
     tab_deprem, tab_param, tab_3d, tab_2d, tab_vaziyet = st.tabs(["🌊 Deprem Spektrumu", "📋 Statik Tasarım", "🌐 3B Model", "📉 2B Kesit", "🗺️ İzohips Planı"])
     
@@ -174,8 +181,15 @@ elif st.session_state.aktif_adim == 3:
         st.dataframe(df[['Sondaj_No', 'Derinlik_m', 'Zemin_Sinifi', 'Zemin_Tipi', 'Dr_Yuzde', 'Cu_Tasarim', 'E_Modulu']], use_container_width=True)
         
     with tab_3d:
+        # İŞTE SENİN İSTEDİĞİN DERİNLİK AYARI BURADA!
+        # Slider'ı tüm ekrana yaymamak için ekranı bölüyoruz (Sol tarafta şıkça duracak)
+        ayar_sutunu, bos_sutun = st.columns([1, 3]) 
+        with ayar_sutunu:
+            hedef_derinlik = st.slider("🔍 3B Harita Kesit Derinliği (m)", min_value=1.0, max_value=40.0, value=15.0, step=0.5)
+            
         try:
-            fig3d = ciz_3d(df, 15.0)
+            # Slider'dan gelen 'hedef_derinlik' değerini çizim motoruna gönderiyoruz
+            fig3d = ciz_3d(df, hedef_derinlik)
             st.plotly_chart(fig3d, use_container_width=True)
         except: st.info("3B Model Çizilemedi")
 
@@ -198,9 +212,14 @@ elif st.session_state.aktif_adim == 3:
     st.divider()
     col1, col2, col3 = st.columns([1, 4, 1.5])
     with col1:
-        if st.button("⬅️ Sismik Ayarlara Dön"): geri(); st.rerun()
+        if st.button("⬅️ Sismik Ayarlara Dön"): 
+            st.session_state.analiz_sonuclari = None # Geri dönerse hafızayı temizle ki tekrar hesaplayabilsin
+            geri()
+            st.rerun()
     with col3:
-        if st.button("Zemin İyileştirmeye Geç ➡️", type="primary"): ileri(); st.rerun()
+        if st.button("Zemin İyileştirmeye Geç ➡️", type="primary"): 
+            ileri()
+            st.rerun()
 
 # ----------------- ADIM 4: ZEMİN İYİLEŞTİRME -----------------
 elif st.session_state.aktif_adim == 4:
