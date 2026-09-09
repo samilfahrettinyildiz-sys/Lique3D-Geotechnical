@@ -229,13 +229,24 @@ elif st.session_state.aktif_adim == 3:
             st.plotly_chart(fig3d, use_container_width=True)
         except: st.info("3B Model Çizilemedi")
 
-    with tab_2d:
+with tab_2d:
         tum_kuyular = list(df['Sondaj_No'].unique())
-        if len(tum_kuyular) >= 2:
+        
+        # İŞTE KAYBOLAN KUYU SEÇİM KUTUSUNU BURAYA GERİ GETİRDİK!
+        secili_kuyular = st.multiselect(
+            "🔍 Kesit Hattı İçin Kuyuları Seçin:", 
+            tum_kuyular, 
+            default=tum_kuyular[:3] if len(tum_kuyular)>=3 else tum_kuyular
+        )
+        
+        if len(secili_kuyular) >= 2:
             try:
-                fig2d = ciz_2d(df, tum_kuyular[:3])
+                fig2d = ciz_2d(df, secili_kuyular)
                 st.plotly_chart(fig2d, use_container_width=True)
-            except: pass
+            except Exception as e: 
+                st.info(f"2B Kesit Çizilemedi: {e}")
+        else:
+            st.warning("⚠️ 2B kesit (profil) çizebilmek için en az 2 kuyu seçmelisiniz.")
             
     with tab_vaziyet:
         if len(kuyu_oturmalari) >= 3:
