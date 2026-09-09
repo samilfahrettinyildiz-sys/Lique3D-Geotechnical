@@ -92,7 +92,7 @@ with st.sidebar:
     ilerleme_orani = 0.0 if st.session_state.aktif_adim == 0 else (st.session_state.aktif_adim / 5.0)
     st.progress(ilerleme_orani)
     
-    st.markdown(f"{'🏠' if st.session_state.aktif_adim == 0 else '✅'} **0. Ana Sayfa (Vitrin)**")
+    st.markdown(f"{'🏠' if st.session_state.aktif_adim == 0 else '✅'} **0. Ana Sayfa**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 1 else ('✅' if st.session_state.aktif_adim > 1 else '⏳')} **1. Sondaj Veri Girişi**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 2 else ('✅' if st.session_state.aktif_adim > 2 else '⏳')} **2. Sismik (AFAD) Ayarları**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 3 else ('✅' if st.session_state.aktif_adim > 3 else '⏳')} **3. Geoteknik Analiz & 3B**")
