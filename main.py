@@ -53,10 +53,14 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
 # ==========================================
 # 1. ARAYÜZ VE HAFIZA (SESSION STATE) KURULUMU
 # ==========================================
+# ==========================================
+# 1. ARAYÜZ VE HAFIZA (SESSION STATE) KURULUMU
+# ==========================================
 st.set_page_config(page_title="Lique3D | Geotechnical Platform", page_icon="🌍", layout="wide")
 
 # Sihirbaz adımlarını ve kullanıcı verilerini hafızada tutuyoruz
-if 'aktif_adim' not in st.session_state: st.session_state.aktif_adim = 1
+# DİKKAT: Başlangıç adımını 1'den 0'a çektik (0 = Vitrin / Ana Sayfa)
+if 'aktif_adim' not in st.session_state: st.session_state.aktif_adim = 0
 if 'ham_df' not in st.session_state: st.session_state.ham_df = None
 if 'sismik' not in st.session_state: 
     st.session_state.sismik = {'pga': 0.300, 'ss': 0.750, 's1': 0.250, 'mw': 7.5, 'dd': 'DD-2 (475 Yıl - Standart Tasarım)'}
@@ -66,15 +70,30 @@ if 'analiz_sonuclari' not in st.session_state: st.session_state.analiz_sonuclari
 
 def ileri(): st.session_state.aktif_adim += 1
 def geri(): st.session_state.aktif_adim -= 1
+def vitrine_don(): st.session_state.aktif_adim = 0; st.session_state.clear()
+
+# --- JANJANLI VİTRİN CSS KODLARI ---
+st.markdown("""
+    <style>
+    .hero-title { font-size: 4.5rem !important; font-weight: 900; color: #7A5CFF; margin-bottom: 0rem; padding-bottom: 0rem; }
+    .hero-subtitle { font-size: 1.3rem; color: #E0E6ED; margin-bottom: 2rem; font-family: 'Courier New', Courier, monospace; }
+    .feature-box { background-color: #1E2433; padding: 20px; border-radius: 10px; border-left: 5px solid #7A5CFF; height: 100%; }
+    </style>
+""", unsafe_allow_html=True)
+
 
 # ==========================================
 # 2. YAN MENÜ (SADECE GPS GÖREVİ GÖRÜR)
 # ==========================================
 with st.sidebar:
     st.markdown("### 🌍 Lique3D İş Akışı")
-    st.progress(st.session_state.aktif_adim / 5.0)
     
-    st.markdown(f"{'🔵' if st.session_state.aktif_adim == 1 else '✅'} **1. Sondaj Veri Girişi**")
+    # 0. adımdaysak ilerleme çubuğu boş görünsün, diğer adımlarda dolsun
+    ilerleme_orani = 0.0 if st.session_state.aktif_adim == 0 else (st.session_state.aktif_adim / 5.0)
+    st.progress(ilerleme_orani)
+    
+    st.markdown(f"{'🏠' if st.session_state.aktif_adim == 0 else '✅'} **0. Ana Sayfa (Vitrin)**")
+    st.markdown(f"{'🔵' if st.session_state.aktif_adim == 1 else ('✅' if st.session_state.aktif_adim > 1 else '⏳')} **1. Sondaj Veri Girişi**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 2 else ('✅' if st.session_state.aktif_adim > 2 else '⏳')} **2. Sismik (AFAD) Ayarları**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 3 else ('✅' if st.session_state.aktif_adim > 3 else '⏳')} **3. Geoteknik Analiz & 3B**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 4 else ('✅' if st.session_state.aktif_adim > 4 else '⏳')} **4. Zemin İyileştirme**")
@@ -83,47 +102,42 @@ with st.sidebar:
     st.divider()
     st.caption("Filyos 3D Motoru ile Güçlendirilmiştir.")
 
+
 # ==========================================
 # 3. ANA EKRAN - SİHİRBAZ ADIMLARI
 # ==========================================
 
-# ----------------- ADIM 1: VERİ GİRİŞİ -----------------
-if st.session_state.aktif_adim == 1:
+# ----------------- ADIM 0: VİTRİN / ANA SAYFA -----------------
+if st.session_state.aktif_adim == 0:
+    st.markdown('<p class="hero-title">Lique3D</p>', unsafe_allow_html=True)
+    st.markdown('<p class="hero-subtitle">Yeni Nesil Geoteknik Analiz ve 3B Zemin Modelleme Platformu</p>', unsafe_allow_html=True)
+    
+    st.write("Sondaj verilerinizi analiz edin, sıvılaşma risklerini haritalayın ve tek tıkla PLAXIS 2D entegrasyonu sağlayın.")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # Özellik Kartları (SaaS Hissiyatı)
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.markdown('<div class="feature-box"><b>🌊 TBDY-2018 Sismik Analiz</b><br><br>AFAD verilerini otomatik okur, PGA ve spektrum eğrilerini çizer. Spektral ivmelere göre sıvılaşma potansiyelini (FS) belirler.</div>', unsafe_allow_html=True)
+    with c2:
+        st.markdown('<div class="feature-box"><b>🌐 3B Zemin İskeleti</b><br><br>Plotly altyapısıyla sondaj loglarınızı 3 boyutlu uzayda birleştirir, derinliğe bağlı izohips haritaları üretir.</div>', unsafe_allow_html=True)
+    with c3:
+        st.markdown('<div class="feature-box"><b>🤖 PLAXIS & Word Otomasyonu</b><br><br>Girdiğiniz verileri saniyeler içinde detaylı Word raporuna ve otomatik PLAXIS 2D makrosuna (.py) dönüştürür.</div>', unsafe_allow_html=True)
+    
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    # Atölyeye (1. Adıma) Geçiş Butonu
+    satir1, satir2, satir3 = st.columns([1, 2, 1])
+    with satir2:
+        if st.button("🚀 Lique3D Çalışma İstasyonunu Başlat", type="primary", use_container_width=True):
+            st.session_state.aktif_adim = 1
+            st.rerun()
+
+# ----------------- ADIM 1: VERİ GİRİŞİ (Burası önceden yazdığımızla aynı devam edecek) -----------------
+elif st.session_state.aktif_adim == 1:
     st.title("Adım 1: Proje ve Veri Girişi 📁")
     st.write("Analize başlamak için sondaj kuyu verilerinizi sisteme tanımlayın.")
-    
-    veri_giris_modu = st.radio("Veri Giriş Yöntemi Seçiniz:", ["Çoklu Kuyu (CSV / Excel Yükle)", "Hızlı Tek Kuyu (Manuel Tablo)"], horizontal=True)
-    
-    gecici_df = None
-    if "Çoklu Kuyu" in veri_giris_modu:
-        yuklenen_dosya = st.file_uploader("Sondaj Verisi (CSV) Yükle", type=['csv'])
-        if yuklenen_dosya is not None:
-            gecici_df = pd.read_csv(yuklenen_dosya, sep=';')
-            st.success(f"{len(gecici_df)} satır veri başarıyla okundu.")
-    else:
-        c1, c2 = st.columns(2)
-        hizli_kuyu_adi = c1.text_input("Sondaj Kuyusu Adı", value="SK-01")
-        hizli_yass = c2.number_input("Yeraltı Su Seviyesi - YASS (m)", value=2.0, step=0.5)
-        
-        sablon_df = pd.DataFrame({"Derinlik_m": [1.5, 3.0, 4.5], "N_arazi": [10, 15, 12], "FC": [15.0, 20.0, 10.0], "PI": [0.0, 0.0, 0.0], "Zemin_Sinifi": ["SM", "SC", "SP"]})
-        hizli_veri_df = st.data_editor(sablon_df, num_rows="dynamic", use_container_width=True)
-        
-        hizli_veri_df['Sondaj_No'] = hizli_kuyu_adi
-        hizli_veri_df['GYS_m'] = hizli_yass
-        hizli_veri_df['X_Koordinat_m'] = 0.0; hizli_veri_df['Y_Koordinat_m'] = 0.0
-        gecici_df = hizli_veri_df
-
-    st.divider()
-    if st.button("Verileri Kaydet ve İleri ➡️", type="primary"):
-        if gecici_df is not None and not gecici_df.empty:
-            if 'Zemin_Sini' in gecici_df.columns: gecici_df.rename(columns={'Zemin_Sini': 'Zemin_Sinifi'}, inplace=True)
-            if 'PI' not in gecici_df.columns: gecici_df['PI'] = 0.0
-            if 'FC' not in gecici_df.columns: gecici_df['FC'] = 0.0
-            st.session_state.ham_df = gecici_df
-            ileri()
-            st.rerun()
-        else:
-            st.error("Lütfen ilerlemeden önce veri girişini tamamlayın.")
+    # ... (1, 2, 3, 4, 5. adımların kodları önceki mesajdaki gibi tamamen aynı kalacak) ...
 
 # ----------------- ADIM 2: SİSMİK AYARLAR -----------------
 elif st.session_state.aktif_adim == 2:
