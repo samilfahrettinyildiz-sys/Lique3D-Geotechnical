@@ -219,16 +219,35 @@ elif st.session_state.aktif_adim == 3:
     with tab_param:
         st.dataframe(df[['Sondaj_No', 'Derinlik_m', 'Zemin_Sinifi', 'Zemin_Tipi', 'Dr_Yuzde', 'Cu_Tasarim', 'E_Modulu']], use_container_width=True)
         
-    with tab_3d:
+with tab_3d:
         ayar_sutunu, bos_sutun = st.columns([1, 3]) 
+        
+        # Filtreleme Kontrol Paneli
         with ayar_sutunu:
-            hedef_derinlik = st.slider("🔍 3B Harita Kesit Derinliği (m)", min_value=1.0, max_value=40.0, value=15.0, step=0.5)
+            st.markdown("##### 🎛️ 3B Model Filtreleri")
+            hedef_derinlik = st.slider("🔍 Kesit Derinliği (m)", min_value=1.0, max_value=40.0, value=15.0, step=0.5)
+            
+            st.divider()
+            tum_kuyular = list(df['Sondaj_No'].unique())
+            secili_3d_kuyular = st.multiselect("🎯 Gösterilecek Sondajlar:", tum_kuyular, default=tum_kuyular)
+            
+            goster_sondajlar = st.toggle("📍 Sondajları Aç/Kapat", value=True)
+            goster_riskli_zon = st.toggle("⚠️ Sadece Sıvılaşabilir Zonları Göster", value=False)
+            goster_kritik_oturma = st.toggle("💥 Sadece >10 cm Oturma Göster", value=False)
             
         try:
-            fig3d = ciz_3d(df, hedef_derinlik)
+            # Akıllanmış çizim motoruna tüm parametreleri yolluyoruz!
+            fig3d = ciz_3d(
+                df=df, 
+                hedef_derinlik=hedef_derinlik, 
+                goster_sondajlar=goster_sondajlar, 
+                secili_kuyular=secili_3d_kuyular, 
+                goster_riskli_zon=goster_riskli_zon, 
+                goster_kritik_oturma=goster_kritik_oturma
+            )
             st.plotly_chart(fig3d, use_container_width=True)
-        except: st.info("3B Model Çizilemedi")
-
+        except Exception as e: 
+            st.info(f"3B Model Çizilemedi: {e}")
     with tab_2d:
         tum_kuyular = list(df['Sondaj_No'].unique())
         secili_kuyular = st.multiselect(
