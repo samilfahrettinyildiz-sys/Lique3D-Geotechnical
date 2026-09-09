@@ -53,13 +53,8 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
 # ==========================================
 # 1. ARAYÜZ VE HAFIZA (SESSION STATE) KURULUMU
 # ==========================================
-# ==========================================
-# 1. ARAYÜZ VE HAFIZA (SESSION STATE) KURULUMU
-# ==========================================
 st.set_page_config(page_title="Lique3D | Geotechnical Platform", page_icon="🌍", layout="wide")
 
-# Sihirbaz adımlarını ve kullanıcı verilerini hafızada tutuyoruz
-# DİKKAT: Başlangıç adımını 1'den 0'a çektik (0 = Vitrin / Ana Sayfa)
 if 'aktif_adim' not in st.session_state: st.session_state.aktif_adim = 0
 if 'ham_df' not in st.session_state: st.session_state.ham_df = None
 if 'sismik' not in st.session_state: 
@@ -88,11 +83,10 @@ st.markdown("""
 with st.sidebar:
     st.markdown("### 🌍 Lique3D İş Akışı")
     
-    # 0. adımdaysak ilerleme çubuğu boş görünsün, diğer adımlarda dolsun
     ilerleme_orani = 0.0 if st.session_state.aktif_adim == 0 else (st.session_state.aktif_adim / 5.0)
     st.progress(ilerleme_orani)
     
-    st.markdown(f"{'🏠' if st.session_state.aktif_adim == 0 else '✅'} **0. Ana Sayfa**")
+    st.markdown(f"{'🏠' if st.session_state.aktif_adim == 0 else '✅'} **0. Ana Sayfa (Vitrin)**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 1 else ('✅' if st.session_state.aktif_adim > 1 else '⏳')} **1. Sondaj Veri Girişi**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 2 else ('✅' if st.session_state.aktif_adim > 2 else '⏳')} **2. Sismik (AFAD) Ayarları**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 3 else ('✅' if st.session_state.aktif_adim > 3 else '⏳')} **3. Geoteknik Analiz & 3B**")
@@ -115,7 +109,6 @@ if st.session_state.aktif_adim == 0:
     st.write("Sondaj verilerinizi analiz edin, sıvılaşma risklerini haritalayın ve tek tıkla PLAXIS 2D entegrasyonu sağlayın.")
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # Özellik Kartları (SaaS Hissiyatı)
     c1, c2, c3 = st.columns(3)
     with c1:
         st.markdown('<div class="feature-box"><b>🌊 TBDY-2018 Sismik Analiz</b><br><br>AFAD verilerini otomatik okur, PGA ve spektrum eğrilerini çizer. Spektral ivmelere göre sıvılaşma potansiyelini (FS) belirler.</div>', unsafe_allow_html=True)
@@ -126,18 +119,53 @@ if st.session_state.aktif_adim == 0:
     
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # Atölyeye (1. Adıma) Geçiş Butonu
     satir1, satir2, satir3 = st.columns([1, 2, 1])
     with satir2:
         if st.button("🚀 Lique3D Çalışma İstasyonunu Başlat", type="primary", use_container_width=True):
             st.session_state.aktif_adim = 1
             st.rerun()
 
-# ----------------- ADIM 1: VERİ GİRİŞİ (Burası önceden yazdığımızla aynı devam edecek) -----------------
+# ----------------- ADIM 1: VERİ GİRİŞİ -----------------
 elif st.session_state.aktif_adim == 1:
     st.title("Adım 1: Proje ve Veri Girişi 📁")
     st.write("Analize başlamak için sondaj kuyu verilerinizi sisteme tanımlayın.")
-    # ... (1, 2, 3, 4, 5. adımların kodları önceki mesajdaki gibi tamamen aynı kalacak) ...
+    
+    veri_giris_modu = st.radio("Veri Giriş Yöntemi Seçiniz:", ["Çoklu Kuyu (CSV / Excel Yükle)", "Hızlı Tek Kuyu (Manuel Tablo)"], horizontal=True)
+    
+    gecici_df = None
+    if "Çoklu Kuyu" in veri_giris_modu:
+        yuklenen_dosya = st.file_uploader("Sondaj Verisi (CSV) Yükle", type=['csv'])
+        if yuklenen_dosya is not None:
+            gecici_df = pd.read_csv(yuklenen_dosya, sep=';')
+            st.success(f"{len(gecici_df)} satır veri başarıyla okundu.")
+    else:
+        c1, c2 = st.columns(2)
+        hizli_kuyu_adi = c1.text_input("Sondaj Kuyusu Adı", value="SK-01")
+        hizli_yass = c2.number_input("Yeraltı Su Seviyesi - YASS (m)", value=2.0, step=0.5)
+        
+        sablon_df = pd.DataFrame({"Derinlik_m": [1.5, 3.0, 4.5], "N_arazi": [10, 15, 12], "FC": [15.0, 20.0, 10.0], "PI": [0.0, 0.0, 0.0], "Zemin_Sinifi": ["SM", "SC", "SP"]})
+        hizli_veri_df = st.data_editor(sablon_df, num_rows="dynamic", use_container_width=True)
+        
+        hizli_veri_df['Sondaj_No'] = hizli_kuyu_adi
+        hizli_veri_df['GYS_m'] = hizli_yass
+        hizli_veri_df['X_Koordinat_m'] = 0.0; hizli_veri_df['Y_Koordinat_m'] = 0.0
+        gecici_df = hizli_veri_df
+
+    st.divider()
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        if st.button("⬅️ Vitrine Dön"): vitrine_don(); st.rerun()
+    with col2:
+        if st.button("Verileri Kaydet ve İleri ➡️", type="primary"):
+            if gecici_df is not None and not gecici_df.empty:
+                if 'Zemin_Sini' in gecici_df.columns: gecici_df.rename(columns={'Zemin_Sini': 'Zemin_Sinifi'}, inplace=True)
+                if 'PI' not in gecici_df.columns: gecici_df['PI'] = 0.0
+                if 'FC' not in gecici_df.columns: gecici_df['FC'] = 0.0
+                st.session_state.ham_df = gecici_df
+                ileri()
+                st.rerun()
+            else:
+                st.error("Lütfen ilerlemeden önce veri girişini tamamlayın.")
 
 # ----------------- ADIM 2: SİSMİK AYARLAR -----------------
 elif st.session_state.aktif_adim == 2:
@@ -163,11 +191,9 @@ elif st.session_state.aktif_adim == 2:
             st.rerun()
 
 # ----------------- ADIM 3: ANALİZ VE 3B MODELLEME -----------------
-# ----------------- ADIM 3: ANALİZ VE 3B MODELLEME -----------------
 elif st.session_state.aktif_adim == 3:
     st.title("Adım 3: Geoteknik Analiz ve 3B Modelleme 📊")
     
-    # PERFORMANS AYARI: Analizi sadece ilk girişte yap, slider değişince baştan hesaplama!
     if st.session_state.analiz_sonuclari is None:
         with st.spinner("Lique3D Matrisleri Çözülüyor... (Lütfen Bekleyin)"):
             df, kuyu_oturmalari, s = geoteknik_analiz(
@@ -177,7 +203,6 @@ elif st.session_state.aktif_adim == 3:
             )
             st.session_state.analiz_sonuclari = {'df': df, 'kuyu_oturmalari': kuyu_oturmalari, 's': s}
     
-    # Hesaplanan sonuçları hafızadan çek
     df = st.session_state.analiz_sonuclari['df']
     s = st.session_state.analiz_sonuclari['s']
     kuyu_oturmalari = st.session_state.analiz_sonuclari['kuyu_oturmalari']
@@ -195,14 +220,11 @@ elif st.session_state.aktif_adim == 3:
         st.dataframe(df[['Sondaj_No', 'Derinlik_m', 'Zemin_Sinifi', 'Zemin_Tipi', 'Dr_Yuzde', 'Cu_Tasarim', 'E_Modulu']], use_container_width=True)
         
     with tab_3d:
-        # İŞTE SENİN İSTEDİĞİN DERİNLİK AYARI BURADA!
-        # Slider'ı tüm ekrana yaymamak için ekranı bölüyoruz (Sol tarafta şıkça duracak)
         ayar_sutunu, bos_sutun = st.columns([1, 3]) 
         with ayar_sutunu:
             hedef_derinlik = st.slider("🔍 3B Harita Kesit Derinliği (m)", min_value=1.0, max_value=40.0, value=15.0, step=0.5)
             
         try:
-            # Slider'dan gelen 'hedef_derinlik' değerini çizim motoruna gönderiyoruz
             fig3d = ciz_3d(df, hedef_derinlik)
             st.plotly_chart(fig3d, use_container_width=True)
         except: st.info("3B Model Çizilemedi")
@@ -227,7 +249,7 @@ elif st.session_state.aktif_adim == 3:
     col1, col2, col3 = st.columns([1, 4, 1.5])
     with col1:
         if st.button("⬅️ Sismik Ayarlara Dön"): 
-            st.session_state.analiz_sonuclari = None # Geri dönerse hafızayı temizle ki tekrar hesaplayabilsin
+            st.session_state.analiz_sonuclari = None
             geri()
             st.rerun()
     with col3:
