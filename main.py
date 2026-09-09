@@ -86,7 +86,7 @@ with st.sidebar:
     ilerleme_orani = 0.0 if st.session_state.aktif_adim == 0 else (st.session_state.aktif_adim / 5.0)
     st.progress(ilerleme_orani)
     
-    st.markdown(f"{'🏠' if st.session_state.aktif_adim == 0 else '✅'} **0. Ana Sayfa**")
+    st.markdown(f"{'🏠' if st.session_state.aktif_adim == 0 else '✅'} **0. Ana Sayfa (Vitrin)**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 1 else ('✅' if st.session_state.aktif_adim > 1 else '⏳')} **1. Sondaj Veri Girişi**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 2 else ('✅' if st.session_state.aktif_adim > 2 else '⏳')} **2. Sismik (AFAD) Ayarları**")
     st.markdown(f"{'🔵' if st.session_state.aktif_adim == 3 else ('✅' if st.session_state.aktif_adim > 3 else '⏳')} **3. Geoteknik Analiz & 3B**")
@@ -229,16 +229,13 @@ elif st.session_state.aktif_adim == 3:
             st.plotly_chart(fig3d, use_container_width=True)
         except: st.info("3B Model Çizilemedi")
 
-with tab_2d:
+    with tab_2d:
         tum_kuyular = list(df['Sondaj_No'].unique())
-        
-        # İŞTE KAYBOLAN KUYU SEÇİM KUTUSUNU BURAYA GERİ GETİRDİK!
         secili_kuyular = st.multiselect(
             "🔍 Kesit Hattı İçin Kuyuları Seçin:", 
             tum_kuyular, 
             default=tum_kuyular[:3] if len(tum_kuyular)>=3 else tum_kuyular
         )
-        
         if len(secili_kuyular) >= 2:
             try:
                 fig2d = ciz_2d(df, secili_kuyular)
