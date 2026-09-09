@@ -22,7 +22,6 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
     script += "    sys.exit()\n\n"
     script += "s.new()\n"
     script += "bh = g_i.borehole(0.0)\n\n"
-    script += "# --- ZEMIN PARAMETRELERI VE TABAKALAR ---\n"
     
     onceki_derinlik = 0.0 
     for i, (pandas_index, row) in enumerate(df.iterrows()):
@@ -39,300 +38,242 @@ def plaxis_makrosu_uret(df, kuyu_adi="SK-01"):
         mat_adi = f"Mat_{i+1}_{guvenli_isim}"
         
         if cu > 0:
-            script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
-            script += f"'SoilModel', 'Mohr-Coulomb', 'DrainageType', 'Undrained (B)', "
-            script += f"'gammaUnsat', {gamma:.2f}, 'gammaSat', {gamma + 1.0:.2f}, "
-            script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
-            script += f"'cref', {cu:.2f})\n"
+            script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', 'SoilModel', 'Mohr-Coulomb', 'DrainageType', 'Undrained (B)', 'gammaUnsat', {gamma:.2f}, 'gammaSat', {gamma + 1.0:.2f}, 'Eref', {e_mod:.0f}, 'nu', 0.35, 'cref', {cu:.2f})\n"
         else:
             c_val = cu if cu > 0 else 1.0
-            script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', "
-            script += f"'SoilModel', 'Mohr-Coulomb', 'DrainageType', 'Drained', "
-            script += f"'gammaUnsat', {gamma:.2f}, 'gammaSat', {gamma + 1.0:.2f}, "
-            script += f"'Eref', {e_mod:.0f}, 'nu', 0.35, "
-            script += f"'cref', {c_val:.2f}, 'phi', {phi:.2f})\n"
+            script += f"{mat_adi} = g_i.soilmat('Identification', '{zemin_sinifi} ({derinlik}m)', 'SoilModel', 'Mohr-Coulomb', 'DrainageType', 'Drained', 'gammaUnsat', {gamma:.2f}, 'gammaSat', {gamma + 1.0:.2f}, 'Eref', {e_mod:.0f}, 'nu', 0.35, 'cref', {c_val:.2f}, 'phi', {phi:.2f})\n"
         
         script += f"g_i.soillayer(bh, {kalinlik:.2f})\n"
         script += f"g_i.set(bh.SoilLayers[{i}].Material, {mat_adi})\n\n"
-        
         onceki_derinlik = derinlik 
         
     script += "print('Lique3D Verileri PLAXIS 2D 2025 Ortamina Basariyla Aktarildi!')\n"
     return script.encode('utf-8')
 
 # ==========================================
-# 1. ARAYÜZ, TEMA VE YAN MENÜ (ORTAK AYARLAR)
+# 1. ARAYÜZ VE HAFIZA (SESSION STATE) KURULUMU
 # ==========================================
-st.set_page_config(page_title="Lique3D Analiz Sistemi", page_icon="🌍", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Lique3D | Geotechnical Platform", page_icon="🌍", layout="wide")
 
-# --- JANJANLI VİTRİN CSS KODLARI ---
-st.markdown("""
-    <style>
-    /* Ana Ekran Başlıkları */
-    .hero-title {
-        font-size: 3.5rem !important;
-        font-weight: 800;
-        color: #4A90E2; 
-        margin-bottom: 0rem;
-        padding-bottom: 0rem;
-    }
-    .hero-subtitle {
-        font-size: 1.2rem;
-        color: #A0A0B0;
-        margin-bottom: 2rem;
-        font-family: 'Courier New', Courier, monospace;
-    }
-    /* Sol Menü Ağaç (Tree) Yapısı Başlıkları */
-    .tree-header {
-        color: #FFFFFF;
-        font-family: 'Courier New', Courier, monospace;
-        font-size: 15px;
-        font-weight: bold;
-        margin-top: 15px;
-        margin-bottom: 10px;
-        border-bottom: 1px solid #2D2D3F;
-        padding-bottom: 5px;
-    }
-    .tree-icon {
-        color: #4A90E2;
-        margin-right: 5px;
-    }
-    </style>
-""", unsafe_allow_html=True)
+# Sihirbaz adımlarını ve kullanıcı verilerini hafızada tutuyoruz
+if 'aktif_adim' not in st.session_state: st.session_state.aktif_adim = 1
+if 'ham_df' not in st.session_state: st.session_state.ham_df = None
+if 'sismik' not in st.session_state: 
+    st.session_state.sismik = {'pga': 0.300, 'ss': 0.750, 's1': 0.250, 'mw': 7.5, 'dd': 'DD-2 (475 Yıl - Standart Tasarım)'}
+if 'iyilestirme' not in st.session_state:
+    st.session_state.iyilestirme = {'aktif': False, 'cap': 80, 'grid': 1.5, 'alan': 3000, 'fiyat': 850}
+if 'analiz_sonuclari' not in st.session_state: st.session_state.analiz_sonuclari = None
 
-# --- ANA EKRAN BAŞLIĞI (Standart st.title yerine havalı hero section) ---
-st.markdown('<p class="hero-title">Lique3D</p>', unsafe_allow_html=True)
-st.markdown('<p class="hero-subtitle">├── Geoteknik Analiz ve Sismik İyileştirme Sistemi<br>└── Kurumsal Karar Destek & AFAD Entegrasyonu</p>', unsafe_allow_html=True)
+def ileri(): st.session_state.aktif_adim += 1
+def geri(): st.session_state.aktif_adim -= 1
 
-ham_df = None
+# ==========================================
+# 2. YAN MENÜ (SADECE GPS GÖREVİ GÖRÜR)
+# ==========================================
+with st.sidebar:
+    st.markdown("### 🌍 Lique3D İş Akışı")
+    st.progress(st.session_state.aktif_adim / 5.0)
+    
+    st.markdown(f"{'🔵' if st.session_state.aktif_adim == 1 else '✅'} **1. Sondaj Veri Girişi**")
+    st.markdown(f"{'🔵' if st.session_state.aktif_adim == 2 else ('✅' if st.session_state.aktif_adim > 2 else '⏳')} **2. Sismik (AFAD) Ayarları**")
+    st.markdown(f"{'🔵' if st.session_state.aktif_adim == 3 else ('✅' if st.session_state.aktif_adim > 3 else '⏳')} **3. Geoteknik Analiz & 3B**")
+    st.markdown(f"{'🔵' if st.session_state.aktif_adim == 4 else ('✅' if st.session_state.aktif_adim > 4 else '⏳')} **4. Zemin İyileştirme**")
+    st.markdown(f"{'🔵' if st.session_state.aktif_adim == 5 else '⏳'} **5. Rapor & PLAXIS Çıktısı**")
+    
+    st.divider()
+    st.caption("Filyos 3D Motoru ile Güçlendirilmiştir.")
 
-# --- SOL MENÜ (AĞAÇ GÖRÜNÜMÜNE UYARLANDI) ---
-st.sidebar.markdown('<div class="tree-header"><span class="tree-icon">📁</span> 1. PROJE VE VERİ GİRİŞİ</div>', unsafe_allow_html=True)
-veri_giris_modu = st.sidebar.radio(
-    "Veri Giriş Yöntemi Seçiniz:", 
-    ["├── Çoklu Kuyu (CSV / Excel)", "└── Hızlı Tek Kuyu (Manuel)"],
-    index=0
-)
+# ==========================================
+# 3. ANA EKRAN - SİHİRBAZ ADIMLARI
+# ==========================================
 
-st.sidebar.markdown('<div class="tree-header"><span class="tree-icon">📊</span> 2. DEPREM VE ZEMİN (AFAD)</div>', unsafe_allow_html=True)
-afad_dosya = st.sidebar.file_uploader("AFAD Raporu (PDF/TXT)", type=['pdf', 'txt', 'csv'])
-
-afad_verileri = {
-    "DD-1 (2475 Yıl - Özel Yapılar)": {"PGA": 0.450, "Ss": 1.100, "S1": 0.350},
-    "DD-2 (475 Yıl - Standart Tasarım)": {"PGA": 0.300, "Ss": 0.750, "S1": 0.250},
-    "DD-3 (72 Yıl - Sık Deprem)": {"PGA": 0.200, "Ss": 0.500, "S1": 0.150},
-    "DD-4 (43 Yıl - Servis Depremi)": {"PGA": 0.100, "Ss": 0.250, "S1": 0.080}
-}
-secilen_dd = st.sidebar.selectbox("Hedef Deprem Düzeyi", list(afad_verileri.keys()), index=1)
-
-afad_durum = "Manuel Veri Bekleniyor."
-if afad_dosya is not None:
-    icerik = ""
-    if afad_dosya.name.endswith('.pdf'):
-        try:
-            import PyPDF2
-            pdf_okuyucu = PyPDF2.PdfReader(afad_dosya)
-            for sayfa in pdf_okuyucu.pages:
-                icerik += sayfa.extract_text() + "\n"
-        except ImportError:
-            pass
+# ----------------- ADIM 1: VERİ GİRİŞİ -----------------
+if st.session_state.aktif_adim == 1:
+    st.title("Adım 1: Proje ve Veri Girişi 📁")
+    st.write("Analize başlamak için sondaj kuyu verilerinizi sisteme tanımlayın.")
+    
+    veri_giris_modu = st.radio("Veri Giriş Yöntemi Seçiniz:", ["Çoklu Kuyu (CSV / Excel Yükle)", "Hızlı Tek Kuyu (Manuel Tablo)"], horizontal=True)
+    
+    gecici_df = None
+    if "Çoklu Kuyu" in veri_giris_modu:
+        yuklenen_dosya = st.file_uploader("Sondaj Verisi (CSV) Yükle", type=['csv'])
+        if yuklenen_dosya is not None:
+            gecici_df = pd.read_csv(yuklenen_dosya, sep=';')
+            st.success(f"{len(gecici_df)} satır veri başarıyla okundu.")
     else:
-        icerik = afad_dosya.getvalue().decode("utf-8")
-    
-    try:
-        pga_match = re.search(secilen_dd[:4] + r'.*?([0-9]+[.,][0-9]+)', icerik.upper()) 
-        if pga_match: afad_durum = f"BAŞARILI: {secilen_dd[:4]} verileri okundu."
-    except Exception:
-        pass
-st.sidebar.info(afad_durum)
-
-with st.sidebar.expander("İleri Sismik ve Laboratuvar Ayarları", expanded=False):
-    pga_val = st.number_input("PGA (İvme)", value=afad_verileri[secilen_dd]["PGA"], step=0.001, format="%.3f")
-    ss_val = st.number_input("Ss (Kısa Periyot)", value=afad_verileri[secilen_dd]["Ss"], step=0.001, format="%.3f")
-    s1_val = st.number_input("S1 (1.0sn Periyot)", value=afad_verileri[secilen_dd]["S1"], step=0.001, format="%.3f")
-    mw = st.slider("Deprem Büyüklüğü (Mw)", 6.0, 8.0, 7.5, 0.1)
-    
-    ce_val = st.number_input("Enerji Oranı (CE)", value=0.83, step=0.01)
-    cb_val = st.number_input("Kuyu Çapı (CB)", value=1.00, step=0.01)
-    cs_val = st.number_input("Numune Alıcı (CS)", value=1.00, step=0.01)
-    
-    vs30_val = st.number_input("Ölçülen Vs30 (m/s) [Opsiyonel]", value=0.0, step=10.0)
-    cu30_val = st.number_input("Laboratuvar Cu30 (kPa) [Opsiyonel]", value=0.0, step=10.0)
-    ze_ozel_kosul = st.checkbox("ZE Özel Kil Koşulu Uygula", value=False)
-    zf_ozel_kosul = st.checkbox("ZF Özel Saha Koşulu Uygula", value=False)
-
-st.sidebar.markdown('<div class="tree-header"><span class="tree-icon">🏗️</span> 3. ZEMİN İYİLEŞTİRME</div>', unsafe_allow_html=True)
-iyilestirme_aktif = st.sidebar.toggle("Jet-Grout / Taş Kolon Uygula", value=False)
-tasarim_capi = st.sidebar.selectbox("Kolon Çapı (cm)", [60, 80, 100, 120], index=1)
-tasarim_grid = st.sidebar.slider("Grid Aralığı (m)", 0.5, 4.0, 1.5, 0.1)
-
-with st.sidebar.expander("Proje ve Görsel Ayarlar", expanded=False):
-    proje_alani = st.number_input("İyileştirilecek Alan (m2)", value=3000, step=100)
-    birim_fiyat = st.number_input("Birim İmalat Fiyatı (TL/m)", value=850, step=50)
-    hedef_derinlik = st.slider("3B Harita Derinliği (m)", 1.0, 20.0, 5.0, 0.5)
-    kati_filtre_aktif = st.checkbox("TBDY Kil Şartını Koru", value=True)
-
-# ==========================================
-# 2. ANA EKRAN (VERİ GİRİŞ ALANI)
-# ==========================================
-if "Çoklu Kuyu" in veri_giris_modu:
-    st.info("👈 Sol menüden deprem ayarlarınızı yapın ve aşağıdan CSV dosyanızı yükleyin.")
-    yuklenen_dosya = st.file_uploader("Sondaj Verisi (CSV) Yükle", type=['csv'])
-    if yuklenen_dosya is not None:
-        ham_df = pd.read_csv(yuklenen_dosya, sep=';')
-else:
-    st.markdown("### 📝 Hızlı Tek Kuyu Veri Girişi")
-    c1, c2 = st.columns(2)
-    hizli_kuyu_adi = c1.text_input("Sondaj Kuyusu Adı", value="SK-01")
-    hizli_yass = c2.number_input("Yeraltı Su Seviyesi - YASS (m)", value=2.0, step=0.5)
-    
-    sablon_df = pd.DataFrame({
-        "Derinlik_m": [1.5, 3.0, 4.5],
-        "N_arazi": [10, 15, 12],
-        "FC": [15.0, 20.0, 10.0],
-        "PI": [0.0, 0.0, 0.0],
-        "Zemin_Sinifi": ["SM", "SC", "SP"]
-    })
-    
-    hizli_veri_df = st.data_editor(sablon_df, num_rows="dynamic", use_container_width=True, hide_index=True)
-    
-    if st.button("🚀 Verileri Analiz Et", use_container_width=True):
-        gecici_df = hizli_veri_df.copy()
-        gecici_df['Sondaj_No'] = hizli_kuyu_adi
-        gecici_df['GYS_m'] = hizli_yass
-        gecici_df['X_Koordinat_m'] = 0.0
-        gecici_df['Y_Koordinat_m'] = 0.0
-        gecici_df['Enlem'] = 0.0 
-        gecici_df['Boylam'] = 0.0
-        ham_df = gecici_df
-
-# ==========================================
-# 3. SİSTEM ÇALIŞTIRMA VE GÖRSELLEŞTİRME
-# ==========================================
-try:
-    if ham_df is not None and len(ham_df) > 0:
-        st.divider()
+        c1, c2 = st.columns(2)
+        hizli_kuyu_adi = c1.text_input("Sondaj Kuyusu Adı", value="SK-01")
+        hizli_yass = c2.number_input("Yeraltı Su Seviyesi - YASS (m)", value=2.0, step=0.5)
         
-        # 1. VERİ TEMİZLİĞİ 
-        if 'Zemin_Sini' in ham_df.columns:
-            ham_df.rename(columns={'Zemin_Sini': 'Zemin_Sinifi'}, inplace=True)
-        if 'PI' not in ham_df.columns: ham_df['PI'] = 0.0
-        if 'FC' not in ham_df.columns: ham_df['FC'] = 0.0
+        sablon_df = pd.DataFrame({"Derinlik_m": [1.5, 3.0, 4.5], "N_arazi": [10, 15, 12], "FC": [15.0, 20.0, 10.0], "PI": [0.0, 0.0, 0.0], "Zemin_Sinifi": ["SM", "SC", "SP"]})
+        hizli_veri_df = st.data_editor(sablon_df, num_rows="dynamic", use_container_width=True)
         
-        # 2. MOTOR ÇAĞRISI
+        hizli_veri_df['Sondaj_No'] = hizli_kuyu_adi
+        hizli_veri_df['GYS_m'] = hizli_yass
+        hizli_veri_df['X_Koordinat_m'] = 0.0; hizli_veri_df['Y_Koordinat_m'] = 0.0
+        gecici_df = hizli_veri_df
+
+    st.divider()
+    if st.button("Verileri Kaydet ve İleri ➡️", type="primary"):
+        if gecici_df is not None and not gecici_df.empty:
+            if 'Zemin_Sini' in gecici_df.columns: gecici_df.rename(columns={'Zemin_Sini': 'Zemin_Sinifi'}, inplace=True)
+            if 'PI' not in gecici_df.columns: gecici_df['PI'] = 0.0
+            if 'FC' not in gecici_df.columns: gecici_df['FC'] = 0.0
+            st.session_state.ham_df = gecici_df
+            ileri()
+            st.rerun()
+        else:
+            st.error("Lütfen ilerlemeden önce veri girişini tamamlayın.")
+
+# ----------------- ADIM 2: SİSMİK AYARLAR -----------------
+elif st.session_state.aktif_adim == 2:
+    st.title("Adım 2: Sismik ve AFAD Parametreleri 🌍")
+    st.write("Verileriniz güvende. Şimdi projenin maruz kalacağı tasarım depremini belirleyelim.")
+    
+    afad_dosya = st.file_uploader("AFAD Raporu (PDF/TXT) Yükle (Otomatik Okuma İçin)", type=['pdf', 'txt'])
+    
+    c1, c2, c3 = st.columns(3)
+    pga_input = c1.number_input("PGA (İvme)", value=st.session_state.sismik['pga'], step=0.01)
+    ss_input = c2.number_input("Ss (Kısa Periyot)", value=st.session_state.sismik['ss'], step=0.01)
+    s1_input = c3.number_input("S1 (1.0sn Periyot)", value=st.session_state.sismik['s1'], step=0.01)
+    mw_input = st.slider("Deprem Büyüklüğü (Mw)", 6.0, 8.0, st.session_state.sismik['mw'], 0.1)
+    
+    st.divider()
+    col1, col2, col3 = st.columns([1, 4, 1])
+    with col1:
+        if st.button("⬅️ Geri Dön"): geri(); st.rerun()
+    with col3:
+        if st.button("Analizi Başlat ➡️", type="primary"):
+            st.session_state.sismik.update({'pga': pga_input, 'ss': ss_input, 's1': s1_input, 'mw': mw_input})
+            ileri()
+            st.rerun()
+
+# ----------------- ADIM 3: ANALİZ VE 3B MODELLEME -----------------
+elif st.session_state.aktif_adim == 3:
+    st.title("Adım 3: Geoteknik Analiz ve 3B Modelleme 📊")
+    
+    # Arka planda motoru çalıştırıyoruz (İyileştirme kapalı)
+    with st.spinner("Lique3D Matrisleri Çözülüyor..."):
         df, kuyu_oturmalari, s = geoteknik_analiz(
-            ham_df, pga_val, ss_val, s1_val, mw, ce_val, cb_val, cs_val, 
-            vs30_val, cu30_val, ze_ozel_kosul, zf_ozel_kosul, 
-            iyilestirme_aktif, tasarim_capi, tasarim_grid, 
-            proje_alani, birim_fiyat, kati_filtre_aktif
+            st.session_state.ham_df, st.session_state.sismik['pga'], st.session_state.sismik['ss'], 
+            st.session_state.sismik['s1'], st.session_state.sismik['mw'], 0.83, 1.0, 1.0, 0.0, 0.0, 
+            False, False, False, 80, 1.5, 3000, 850, True
         )
+        st.session_state.analiz_sonuclari = {'df': df, 'kuyu_oturmalari': kuyu_oturmalari, 's': s}
+    
+    tab_deprem, tab_param, tab_3d, tab_2d, tab_vaziyet = st.tabs(["🌊 Deprem Spektrumu", "📋 Statik Tasarım", "🌐 3B Model", "📉 2B Kesit", "🗺️ İzohips Planı"])
+    
+    with tab_deprem:
+        st.success(f"Yerel Zemin Sınıfı: {s.get('zemin_sinifi', 'ZE')} hesaplandı.")
+        try:
+            fig_spec = ciz_spektrum(s['T_vals'], s['Sae_vals'], s['TA'], s['TB'], "DD-2")
+            st.plotly_chart(fig_spec, use_container_width=True)
+        except: st.warning("Çizim modülü hazır değil.")
+    
+    with tab_param:
+        st.dataframe(df[['Sondaj_No', 'Derinlik_m', 'Zemin_Sinifi', 'Zemin_Tipi', 'Dr_Yuzde', 'Cu_Tasarim', 'E_Modulu']], use_container_width=True)
+        
+    with tab_3d:
+        try:
+            fig3d = ciz_3d(df, 15.0)
+            st.plotly_chart(fig3d, use_container_width=True)
+        except: st.info("3B Model Çizilemedi")
 
-        tab_deprem, tab_param, tab_3d, tab_2d, tab_vaziyet, tab_ai, tab_rapor, tab_plaxis = st.tabs([
-            "🌊 Deprem Spektrumu", "📋 Statik Tasarım", "🌐 3B Model", "📉 2B Kesit", 
-            "🗺️ İzohips Planı", "🏗️ İyileştirme Simulasyonu", "📄 Rapor Çıktısı", "🔵 PLAXIS Entegrasyonu"
-        ])
-
-        with tab_deprem:
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Yerel Zemin Sınıfı", s.get('zemin_sinifi', 'ZE'), s.get('zemin_nedeni', 'Analiz Sonucu'))
-            c2.metric("PGA", f"{pga_val:.3f} g")
-            c3.metric("SDS", f"{s.get('SDS', 0.0):.3f} g")
-            c4.metric("SD1", f"{s.get('SD1', 0.0):.3f} g")
-            
-            with st.expander("Ampirik Tahmin Bilgileri", expanded=False):
-                t1, t2 = st.columns(2)
-                t1.metric("Tahmini Ortalama Vs30", f"{s.get('tahmini_vs30_ort', 0):.0f} m/s")
-                t2.metric("Tahmini Ortalama Cu30", f"{s.get('tahmini_cu30_ort', 0):.0f} kPa")
-                
+    with tab_2d:
+        tum_kuyular = list(df['Sondaj_No'].unique())
+        if len(tum_kuyular) >= 2:
             try:
-                fig_spec = ciz_spektrum(s['T_vals'], s['Sae_vals'], s['TA'], s['TB'], secilen_dd[:4])
-                st.plotly_chart(fig_spec, use_container_width=True)
-            except Exception:
-                st.warning("Spektrum görselleştirme verileri raporda mevcut değil veya çizim modülü eksik.")
-
-        with tab_param:
-            goster_param = df[['Sondaj_No', 'Derinlik_m', 'Zemin_Sinifi', 'Zemin_Tipi', 'Gamma_Tasarim', 'Phi_Acisi', 'Dr_Yuzde', 'Cu_Tasarim', 'E_Modulu']].copy()
-            goster_param.columns = ['Kuyu No', 'Derinlik (m)', 'Sınıf', 'Davranış', 'Birim Hacim Ağırlık (kN/m3)', 'Sürtünme Açısı', 'Dr (%)', 'Cu (kPa)', 'E Modülü (kPa)']
-            st.dataframe(goster_param.style.format({'Birim Hacim Ağırlık (kN/m3)': '{:.1f}', 'Sürtünme Açısı': '{:.1f}', 'Dr (%)': '{:.1f}', 'Cu (kPa)': '{:.1f}', 'E Modülü (kPa)': '{:.0f}'}, na_rep="-"), use_container_width=True)
-
-        with tab_3d:
+                fig2d = ciz_2d(df, tum_kuyular[:3])
+                st.plotly_chart(fig2d, use_container_width=True)
+            except: pass
+            
+    with tab_vaziyet:
+        if len(kuyu_oturmalari) >= 3:
             try:
-                fig3d = ciz_3d(df, hedef_derinlik)
-                st.plotly_chart(fig3d, use_container_width=True)
-            except Exception:
-                st.info("3B Model Çizilemedi (Modül Eksik Olabilir)")
+                fig_vaziyet = ciz_vaziyet(kuyu_oturmalari)
+                st.plotly_chart(fig_vaziyet, use_container_width=True)
+            except: pass
+        else: st.info("İzohips için en az 3 kuyu gereklidir.")
 
-        with tab_2d:
-            tum_kuyular = list(df['Sondaj_No'].unique())
-            secili_kuyular = st.multiselect("Kesit Hattı Kuyuları:", tum_kuyular, default=tum_kuyular[:3] if len(tum_kuyular)>=3 else tum_kuyular)
-            if len(secili_kuyular) >= 2:
-                try:
-                    fig2d = ciz_2d(df, secili_kuyular)
-                    st.plotly_chart(fig2d, use_container_width=True)
-                except Exception:
-                    st.info("2B Kesit Çizilemedi")
+    st.divider()
+    col1, col2, col3 = st.columns([1, 4, 1.5])
+    with col1:
+        if st.button("⬅️ Sismik Ayarlara Dön"): geri(); st.rerun()
+    with col3:
+        if st.button("Zemin İyileştirmeye Geç ➡️", type="primary"): ileri(); st.rerun()
 
-        with tab_vaziyet:
-            if len(kuyu_oturmalari) >= 3:
-                try:
-                    fig_vaziyet = ciz_vaziyet(kuyu_oturmalari)
-                    st.plotly_chart(fig_vaziyet, use_container_width=True)
-                except Exception:
-                    st.info("İzohips Haritası Çizilemedi")
-            else:
-                st.info("BİLGİ: İzohips haritası için en az 3 sondaj verisi gereklidir.")
-
-        with tab_ai:
-            st.markdown(f"**Tasarım Parametreleri:** Çap {tasarim_capi} cm kolon, {tasarim_grid} m grid.")
-            if s.get('max_oturma', 0) > 4.0: 
-                st.error(f"DİKKAT: Maksimum oturma {s.get('max_oturma', 0):.1f} cm sınırları aşmaktadır.")
-            else: 
-                st.success(f"BAŞARILI: Maksimum oturma {s.get('max_oturma', 0):.1f} cm ile güvenli seviyededir.")
-                
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Maks. Oturma", f"{s.get('max_oturma', 0):.1f} cm")
-            c2.metric("Yer Değiştirme", f"% {s.get('Ar', 0)*100:.1f}")
-            c3.metric("Kolon Sayısı", f"{s.get('toplam_kolon_sayisi', 0)} Adet")
-            c4.metric("Tahmini Maliyet", f"TL {s.get('toplam_maliyet', 0):,.0f}")
-
-        with tab_rapor:
-            st.markdown("## Geoteknik Analiz Çıktısı")
-            gosterilecek_df = df[['Sondaj_No', 'Derinlik_m', 'Zemin_Sinifi', 'N_arazi', 'CR', 'N60', 'FS', 'Tabaka_Oturmasi_cm']].copy()
-            gosterilecek_df.columns = ['Kuyu No', 'Derinlik (m)', 'Zemin Türü', 'Arazi N', 'Tij(CR)', 'N60', 'FS', 'Oturma (cm)']
-            st.dataframe(gosterilecek_df.style.format({'Tij(CR)': '{:.2f}', 'N60': '{:.1f}', 'FS': '{:.2f}', 'Oturma (cm)': '{:.2f}'}), use_container_width=True)
-            
-            csv_cikti = gosterilecek_df.to_csv(index=False, sep=';').encode('utf-8-sig') 
-            st.download_button("Excel Formatında İndir", data=csv_cikti, file_name='Lique3D_Rapor.csv', mime='text/csv')
-            
-            st.divider()
-            st.markdown("### 📝 Yönetici Özeti ve Statik Raporu")
-            try:
-                s['PGA'] = pga_val 
-                word_dosyasi = word_raporu_uret(df, s, secilen_dd)
-                st.download_button(
-                    label="Word Raporunu İndir (.docx)",
-                    data=word_dosyasi,
-                    file_name=f"Geoteknik_Rapor_{secilen_dd[:4]}.docx",
-                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                )
-            except Exception:
-                st.warning("Rapor motoru modülü bulunamadı.")
-
-        with tab_plaxis:
-            st.markdown("## 🔵 PLAXIS 2D Otomatik Model Aktarımı")
-            st.info("Bu modül, Lique3D üzerinde analiz ettiğiniz profilini ve statik parametreleri tek tıkla PLAXIS 2D'ye aktarmanız için bir Python makrosu (.py) üretir.")
-            
-            secili_kuyu_plaxis = st.selectbox("Aktarılacak Kuyuyu Seçin:", df['Sondaj_No'].unique())
-            plaxis_icin_df = df[df['Sondaj_No'] == secili_kuyu_plaxis].sort_values('Derinlik_m')
-            
-            plaxis_dosyasi = plaxis_makrosu_uret(plaxis_icin_df, secili_kuyu_plaxis)
-            
-            st.download_button(
-                label="🐍 PLAXIS Makrosunu İndir (.py)",
-                data=plaxis_dosyasi,
-                file_name=f"Lique3D_to_PLAXIS_{secili_kuyu_plaxis}.py",
-                mime="text/x-python"
+# ----------------- ADIM 4: ZEMİN İYİLEŞTİRME -----------------
+elif st.session_state.aktif_adim == 4:
+    st.title("Adım 4: Zemin İyileştirme Tasarımı 🏗️")
+    st.write("Sıvılaşma veya oturma riskine karşı Jet-Grout veya Taş Kolon ağını tasarlayın.")
+    
+    iyilestirme_toggle = st.toggle("İyileştirme Simülasyonunu Aktif Et", value=st.session_state.iyilestirme['aktif'])
+    
+    c1, c2, c3 = st.columns(3)
+    cap_input = c1.selectbox("Kolon Çapı (cm)", [60, 80, 100, 120], index=1)
+    grid_input = c2.slider("Grid Aralığı (m)", 0.5, 4.0, st.session_state.iyilestirme['grid'])
+    alan_input = c3.number_input("İyileştirilecek Alan (m2)", value=st.session_state.iyilestirme['alan'])
+    
+    if st.button("Tasarımı Test Et ⚙️"):
+        st.session_state.iyilestirme.update({'aktif': iyilestirme_toggle, 'cap': cap_input, 'grid': grid_input, 'alan': alan_input})
+        with st.spinner("İyileştirilmiş Zemin Çözülüyor..."):
+            df, kuyu_oturmalari, s = geoteknik_analiz(
+                st.session_state.ham_df, st.session_state.sismik['pga'], st.session_state.sismik['ss'], 
+                st.session_state.sismik['s1'], st.session_state.sismik['mw'], 0.83, 1.0, 1.0, 0.0, 0.0, 
+                False, False, iyilestirme_toggle, cap_input, grid_input, alan_input, 850, True
             )
+            st.session_state.analiz_sonuclari = {'df': df, 'kuyu_oturmalari': kuyu_oturmalari, 's': s}
+        
+        st.success("İyileştirme Başarılı!")
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Yeni Maks. Oturma", f"{s.get('max_oturma', 0):.1f} cm")
+        m2.metric("Yer Değiştirme Oranı", f"% {s.get('Ar', 0)*100:.1f}")
+        m3.metric("Kolon Sayısı", f"{s.get('toplam_kolon_sayisi', 0)} Adet")
+    
+    st.divider()
+    col1, col2, col3 = st.columns([1, 4, 1.5])
+    with col1:
+        if st.button("⬅️ Analize Dön"): geri(); st.rerun()
+    with col3:
+        if st.button("Rapor ve Çıktıları Al ➡️", type="primary"): 
+            st.session_state.iyilestirme['aktif'] = iyilestirme_toggle
+            ileri()
+            st.rerun()
 
-except Exception as e:
-    st.error(f"Sistem Hatası Oluştu: {e}")
+# ----------------- ADIM 5: RAPOR VE PLAXIS -----------------
+elif st.session_state.aktif_adim == 5:
+    st.title("Adım 5: Nihai Rapor ve PLAXIS Çıktısı 📄")
+    st.success("Tüm mühendislik hesaplamaları tamamlandı. Çıktılarınızı alabilirsiniz.")
+    
+    df = st.session_state.analiz_sonuclari['df']
+    s = st.session_state.analiz_sonuclari['s']
+    
+    tab_rapor, tab_plaxis = st.tabs(["📑 Excel & Word Raporu", "🔵 PLAXIS 2D Entegrasyonu"])
+    
+    with tab_rapor:
+        st.dataframe(df[['Sondaj_No', 'Derinlik_m', 'Zemin_Sinifi', 'N_arazi', 'FS', 'Tabaka_Oturmasi_cm']], use_container_width=True)
+        csv_cikti = df.to_csv(index=False, sep=';').encode('utf-8-sig') 
+        st.download_button("📥 Tabloyu Excel Olarak İndir", data=csv_cikti, file_name='Lique3D_Rapor.csv', mime='text/csv')
+        
+        try:
+            s['PGA'] = st.session_state.sismik['pga']
+            word_dosyasi = word_raporu_uret(df, s, st.session_state.sismik['dd'])
+            st.download_button(label="📝 Kapsamlı Word Raporunu İndir", data=word_dosyasi, file_name=f"Geoteknik_Rapor.docx", mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+        except: st.warning("Word Rapor motoru modülü bulunamadı.")
+
+    with tab_plaxis:
+        st.info("Hesaplanan statik zemin parametrelerini PLAXIS 2D ortamına aktaracak Python makrosunu aşağıdan indirebilirsiniz.")
+        secili_kuyu_plaxis = st.selectbox("Aktarılacak Kuyuyu Seçin:", df['Sondaj_No'].unique())
+        plaxis_icin_df = df[df['Sondaj_No'] == secili_kuyu_plaxis].sort_values('Derinlik_m')
+        
+        plaxis_dosyasi = plaxis_makrosu_uret(plaxis_icin_df, secili_kuyu_plaxis)
+        st.download_button(label="🐍 PLAXIS Makrosunu İndir (.py)", data=plaxis_dosyasi, file_name=f"Lique3D_to_PLAXIS_{secili_kuyu_plaxis}.py", mime="text/x-python")
+
+    st.divider()
+    col1, col2 = st.columns([1, 5])
+    with col1:
+        if st.button("⬅️ Tasarıma Dön"): geri(); st.rerun()
+    with col2:
+        if st.button("🔄 Yeni Projeye Başla (Sıfırla)", type="primary"): 
+            st.session_state.clear()
+            st.rerun()
