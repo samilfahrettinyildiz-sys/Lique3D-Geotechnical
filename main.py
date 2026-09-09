@@ -219,10 +219,9 @@ elif st.session_state.aktif_adim == 3:
     with tab_param:
         st.dataframe(df[['Sondaj_No', 'Derinlik_m', 'Zemin_Sinifi', 'Zemin_Tipi', 'Dr_Yuzde', 'Cu_Tasarim', 'E_Modulu']], use_container_width=True)
         
-with tab_3d:
+    with tab_3d:
         ayar_sutunu, bos_sutun = st.columns([1, 3]) 
         
-        # Filtreleme Kontrol Paneli
         with ayar_sutunu:
             st.markdown("##### 🎛️ 3B Model Filtreleri")
             hedef_derinlik = st.slider("🔍 Kesit Derinliği (m)", min_value=1.0, max_value=40.0, value=15.0, step=0.5)
@@ -236,7 +235,6 @@ with tab_3d:
             goster_kritik_oturma = st.toggle("💥 Sadece >10 cm Oturma Göster", value=False)
             
         try:
-            # Akıllanmış çizim motoruna tüm parametreleri yolluyoruz!
             fig3d = ciz_3d(
                 df=df, 
                 hedef_derinlik=hedef_derinlik, 
@@ -248,6 +246,7 @@ with tab_3d:
             st.plotly_chart(fig3d, use_container_width=True)
         except Exception as e: 
             st.info(f"3B Model Çizilemedi: {e}")
+
     with tab_2d:
         tum_kuyular = list(df['Sondaj_No'].unique())
         secili_kuyular = st.multiselect(
